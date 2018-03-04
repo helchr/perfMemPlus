@@ -1,0 +1,46 @@
+#!/bin/bash
+
+#functions
+usage()
+{
+    echo "usage perfMemPlus -o output -c samplerate -a allocationMinSize -h help -- application"
+}
+
+#default argument values
+sampleRate=2000
+filename=./perf.db
+perf=~/bin/perf
+allocationMinSize=0
+
+#argument parsing
+while [ "$1" != "" ]; do
+    case $1 in
+        -o | --output )            shift
+                                   filename=$1
+                                   ;;
+        -c | --samplerate )        shift
+																   sampleRate=$1
+                                   ;;
+			  -a | --allocationMinSize)  shift
+																   allocationMinSize=$1
+																   ;;
+        -h | --help )              usage
+                                 exit
+                                 ;;
+        * )											 break
+    esac
+    shift
+done
+
+cycleSampleRate=$(($sampleRate*1000))
+
+#actual perf execution
+rm /tmp/*.allocationData
+export ALLOCATION_MIN_SIZE=$allocationMinSize
+LD_PRELOAD=`dirname $0`/../allocationTracker/ldlib.so $perf record -d -W -e cpu/mem-loads,ldlat=1,period=$sampleRate/P,cpu/mem-stores,period=$sampleRate/P,cpu/cpu-cycles,period=$cycleSampleRate/P,cpu/instructions,period=$cycleSampleRate/P,cpu/event=0xc2,umask=0x1,inv=0x1,name=StallCycles,period=$cycleSampleRate/P -g -k CLOCK_MONOTONIC -o /tmp/perf.data -- "$@"
+$perf script -i /tmp/perf.data -s `dirname $0`/../perfSqliteExport/exportToSqlite.py /tmp/perf.db -c
+cmdline="$@"
+`dirname $0`/../prepareDatabase/prepareDatabase /tmp/perf.db -c $sampleRate -a $allocationMinSize -l "$cmdline"
+cp /tmp/perf.db $filename
+rm /tmp/perf.db
+
