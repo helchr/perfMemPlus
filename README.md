@@ -7,20 +7,22 @@ Installation
 =====
 Run buildAll.sh
 
+This script is designed for Ubuntu 16.04 and may require changes on other systems
 
-Or build components located in the sub directories individually
 
-allocationTracker
+Or build components located in the sub directories individually:
 
-prepareDatabase
+* allocationTracker
 
-Perf with python scripting support
+* prepareDatabase
 
-viewer
+* Perf with python scripting support
 
-Check the subdirectories for detailed instructions
+* viewer
 
-The profiling part and the viewer can run on different systems so build the components for the appropriate environment
+Check the subdirectories for detailed instructions.
+
+The profiling part and the viewer can run on different systems so build the components for the appropriate environment.
 
 
 Usage
