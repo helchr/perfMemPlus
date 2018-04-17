@@ -17,7 +17,6 @@ public:
   explicit AnalysisMain(QWidget *parent = 0);
   ~AnalysisMain();
   void setDbPath(const QString& path);
-  void setExePath(const QString& path);
 
   void dragEnterEvent(QDragEnterEvent *event);
   void dropEvent(QDropEvent *event);
@@ -28,9 +27,7 @@ public slots:
 private slots:
   void objectsTableRowChanged();
   void objectsCallPathTableRowChanged();
-
   void on_actionOpen_Database_triggered();
-  void on_actionSet_Executable_triggered();
   void on_functionsCachePushButton_clicked();
   void on_showCacheObjectspushButton_clicked();
   void on_showObjectsAccessedByPushButton_clicked();
@@ -42,6 +39,8 @@ private slots:
   void on_showObjectCacheCoherencyPushButton_clicked();
   void on_timeAccessDiagramButton_clicked();
   void on_timeAccessObjectsDiagramPushButton_clicked();
+  void on_runPushButton_clicked();
+  void on_exportToPdfPushButton_3_clicked();
 
 private:
   Ui::AnalysisMain *ui;
@@ -51,7 +50,6 @@ private:
   QSqlRelationalTableModel *modelObjectsAllocationSites;
   QItemSelectionModel *modelObjectsAllocationSitesSelectionModel;
   QString dbPath;
-  QString exePath;
 
   void showError(const QSqlError &err);
   void loadDatabase(const QString& path);
@@ -64,6 +62,8 @@ private:
   void showAllocationCallpathFromCallPathId(const int callpathId);
   QStringList getSelectedFunctions() const;
   QStringList getSelectedObjects() const;
+  QPair<QString, int> getFileAndLineOfCallpathId(int id);
+  QString getShortFileAndLineOfCallpathId(int id);
 };
 
 #endif // ANALYSISMAIN_H

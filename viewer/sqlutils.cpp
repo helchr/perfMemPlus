@@ -22,6 +22,14 @@ QString SqlUtils::makeSqlStringFunctions(const QStringList &list)
   return quotedList.join(" or name = ");
 }
 
+QString SqlUtils::makeSqlStringFunction(const QString &functionString)
+{
+  auto functionStringCpy(functionString);
+  functionStringCpy.prepend("\"");
+  functionStringCpy.append("\"");
+  return functionStringCpy;
+}
+
 QString SqlUtils::makeIncludeNullStatement(const QStringList& items)
 {
   QString nullClause = "";

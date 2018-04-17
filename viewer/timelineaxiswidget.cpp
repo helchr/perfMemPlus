@@ -4,10 +4,12 @@
 
 TimelineAxisWidget::TimelineAxisWidget(QWidget *parent) : AbstractTimelineWidget(parent)
 {
+
 }
 
 void TimelineAxisWidget::drawAxis(unsigned long long min, unsigned long long max)
 {
+  //painter->save();
   this->resize(this->size().width(),30);
   setAxisStyle();
   const int lineOffsetTop = 5;
@@ -15,6 +17,7 @@ void TimelineAxisWidget::drawAxis(unsigned long long min, unsigned long long max
   drawLeftmostAxisLabel(min,lineOffsetTop);
   drawRightmostAxisLabel(max,lineOffsetTop);
   drawTicks(min,max,lineOffsetTop);
+ //painter->restore();
 }
 
 void TimelineAxisWidget::drawTicks(const unsigned long long left, const unsigned long long right, const int yOffset)

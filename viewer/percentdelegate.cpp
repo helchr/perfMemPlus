@@ -8,15 +8,15 @@ PercentDelegate::PercentDelegate(QObject *parent) : QStyledItemDelegate(parent)
 
 float PercentDelegate::relativeCost(const QModelIndex &index) const
 {
-  bool ok = false;
-  float cost = index.data(Qt::DisplayRole).toFloat(&ok);
-  cost = cost / 100;
-  return ok ? cost : 0;
+    bool ok = false;
+    float cost = index.data(Qt::DisplayRole).toFloat(&ok);
+    cost = cost / 100;
+    return ok ? cost : 0;
 }
 
-QString PercentDelegate::displayText(const QModelIndex &index, const QLocale&) const
+QString PercentDelegate::displayText(const QModelIndex &index, const QLocale &locale) const
 {
-  return index.data().toString();
+    return index.data().toString();
 }
 
 void PercentDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
@@ -54,11 +54,11 @@ void PercentDelegate::paint(QPainter *painter, const QStyleOptionViewItem &optio
 
 QSize PercentDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
-  QStyleOptionViewItem opt(option);
-  initStyleOption(&opt, index);
+    QStyleOptionViewItem opt(option);
+    initStyleOption(&opt, index);
 
-  const QString text = displayText(index, opt.locale);
-  const QSize size = QSize(option.fontMetrics.width(text),
-  option.fontMetrics.height());
-  return size;
+    const QString text = displayText(index, opt.locale);
+    const QSize size = QSize(option.fontMetrics.width(text),
+                             option.fontMetrics.height());
+    return size;
 }

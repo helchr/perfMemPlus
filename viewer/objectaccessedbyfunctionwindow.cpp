@@ -41,19 +41,20 @@ ui(new Ui::ObjectAccessedByFunctionWindow)
   model->setHeaderData(1,Qt::Horizontal, "Samples %");
   model->setHeaderData(2,Qt::Horizontal, "Average Latency");
   model->setHeaderData(3,Qt::Horizontal, "Latency %");
-  ui->objectsTableView->setModel(model);
+
+  QSortFilterProxyModel* m=new QSortFilterProxyModel(this);
+  m->setDynamicSortFilter(true);
+  m->setSourceModel(model);
+  ui->objectsTableView->setModel(m);
+
   ui->objectsTableView->setItemDelegateForColumn(3,new PercentDelegate(this));
   ui->objectsTableView->setItemDelegateForColumn(1,new PercentDelegate(this));
-  ui->objectsTableView->resizeColumnsToContents();
+  GuiUtils::resizeColumnsToContents(ui->objectsTableView);
   ui->objectsTableView->show();
   connect(ui->objectsTableView->selectionModel(), SIGNAL(selectionChanged(QItemSelection ,QItemSelection)),
   this, SLOT(objectsTableRowChanged()));
 }
 
-void ObjectAccessedByFunctionWindow::setExePath(const QString &path)
-{
-  exePath = path;
-}
 
 ObjectAccessedByFunctionWindow::~ObjectAccessedByFunctionWindow()
 {
@@ -66,7 +67,7 @@ void ObjectAccessedByFunctionWindow::objectsTableRowChanged()
   if(selectedRows.count() == 1)
   {
     auto id = selectedRows.first().data(Qt::DisplayRole).toInt();
-    AllocationCallPathResolver acpr(exePath);
+    AllocationCallPathResolver acpr;
     ui->callPathTreeWidget->clear();
     acpr.writeAllocationCallpath(id,ui->callPathTreeWidget);
     GuiUtils::resizeColumnsToContents(ui->callPathTreeWidget);

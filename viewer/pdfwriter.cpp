@@ -18,7 +18,7 @@ PdfWriter::~PdfWriter()
   delete fd;
 }
 
-void PdfWriter::writeTableToPdf(QTableView* view, const QString& path) const
+void PdfWriter::writeTableToPdf(QTableView* view, const QString& path)
 {
   QTableView tmpView;
   tmpView.setModel(view->model());
@@ -45,7 +45,7 @@ void PdfWriter::writeTableToPdf(QTableView* view, const QString& path) const
   writeWidgetToPdf(&tmpView,path);
 }
 
-void PdfWriter::writeWidgetToPdf(QWidget* w, const QString& path) const
+void PdfWriter::writeWidgetToPdf(QWidget* w, const QString& path)
 {
   QPicture pic;
   QPainter painter(&pic);
@@ -79,7 +79,6 @@ void PdfWriter::writeWidgetToPdf(QWidget* w)
       auto path = fd->selectedFiles().first();
       writeWidgetToPdf(w,path);
     }
-
 }
 
 void PdfWriter::writeTableToPdf(QTableView* view)

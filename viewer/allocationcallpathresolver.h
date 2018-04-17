@@ -7,17 +7,13 @@
 class AllocationCallPathResolver
 {
 public:
-  AllocationCallPathResolver(const QString& path = "");
-
-  void setExe(const QString& path);
+  AllocationCallPathResolver() = default;
   void writeAllocationCallpath(const int allocationId, QTreeWidget *treeWidget) const;
   void writeAllocationCallpathFromCallpathId(const int callpathId, QTreeWidget *treeWidget) const;
-
 private:
-  QString exePath = "";
-  QString addr2line(const QString &exe, const QString &address) const;
   template<class T>
   void addCallstackEntry(long long id, T *parent) const;
+  bool columnExists(const QString &tableName, const QString &columnName) const;
 };
 
 #endif // ALLOCATIONCALLPATHRESOLVER_H

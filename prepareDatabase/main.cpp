@@ -5,6 +5,8 @@
 #include <regex>
 #include <vector>
 #include <limits>
+#include "address2Line.h"
+#include <QStringBuilder>
 
 struct AllocationInfoRaw
 {
@@ -65,7 +67,10 @@ void createAllocationsSymbolsTable(QSqlDatabase& db)
   ip bigint, \
   dso_id integer, \
   name varchar(2048), \
-  offset)");
+  offset integer, \
+  file varchar(4096), \
+  line integer, \
+  inlinedBy varchar(4096))");
 }
 
 void prepare(QSqlQuery& query, const QString& statement)
@@ -95,7 +100,7 @@ bool isInCallchain(const QString& line)
 {
   if (line.length() > 0)
   {
-    if(line[0] == '/' || line[0] == '[')
+    if(line[0] == QLatin1Char('/') || line[0] == QLatin1Char('['))
     {
       return true;
     }
@@ -109,20 +114,12 @@ bool isCallchainStart(const QString& line)
   auto idx = line.indexOf(' ',0);
   if(idx != -1)
   {
-    if(line.indexOf("callchain",idx+1) == idx+1)
+    if(line.indexOf(QLatin1String("callchain"),idx+1) == idx+1)
     {
       return true;
     }
   }
   return false;
-  /*
-  static thread_local QRegExp rgx("^\\d+ callchain$");
-  if(rgx.indexIn(line) >= 0)
-    {
-      return true;
-    }
-  return false;
-  */
 }
 
 bool isAllocationInfo(const QString& line)
@@ -130,21 +127,12 @@ bool isAllocationInfo(const QString& line)
   auto idx = line.indexOf(' ',0);
   if(idx != -1)
   {
-    if(line.indexOf("pid ",idx+1) == idx+1)
+    if(line.indexOf(QLatin1String("pid "),idx+1) == idx+1)
     {
       return true;
     }
   }
   return false;
-
-  /*
-  static thread_local QRegExp rgx("^\\d+ pid");
-  if(rgx.indexIn(line) >= 0)
-    {
-      return true;
-    }
-  return false;
-  */
 }
 
 bool isDeallocation(const AllocationInfoRaw a)
@@ -336,7 +324,6 @@ CallpathSymbolInfoRaw readCallchainEntry(const QString& input)
   }
   else
   {
-
     std::getline(line,dso,'(');
     callpathInfo.dso = QString::fromStdString(dso);
     if(line.peek() == ')')
@@ -387,6 +374,21 @@ std::vector<std::string> split(const std::string &s, char delim) {
 }
 
 
+QString getLongNameOfDso(int dsoId, const QSqlDatabase& db)
+{
+ QSqlQuery getDsoLongName(db);
+ getDsoLongName.prepare("Select long_name from dsos where id = ?");
+ getDsoLongName.bindValue(0,dsoId);
+ getDsoLongName.exec();
+ if(getDsoLongName.next())
+ {
+   return getDsoLongName.value(0).toString();
+ }
+ else
+ {
+   return QString("");
+ }
+}
 
 long long insertCallpathSymbolInfo(const CallpathSymbolInfoRaw& callpathSymbol, const QSqlDatabase& db)
 {
@@ -402,9 +404,8 @@ long long insertCallpathSymbolInfo(const CallpathSymbolInfoRaw& callpathSymbol, 
     prepare(getDsoId,"SELECT id from dsos WHERE short_name = ?");
     // get shortname of dso string: split at /, get the last entry
     QString shortName;
-    std::vector<QString> elems;
-    QStringList list = callpathSymbol.dso.split('/');
-    shortName = list.last();
+    auto list = callpathSymbol.dso.splitRef('/');
+    shortName = list.last().toString();
     getDsoId.bindValue(0,shortName);
     getDsoId.exec();
     if(getDsoId.next())
@@ -422,6 +423,14 @@ long long insertCallpathSymbolInfo(const CallpathSymbolInfoRaw& callpathSymbol, 
       dsoId = getLastInsertedId(db);
     }
   }
+  auto dsoName = getLongNameOfDso(dsoId,db);
+  Address2Line::LineInfo lineInfo;
+  if(dsoName != "")
+  {
+    lineInfo = Address2Line::getLineInfo(dsoName,QString::number(callpathSymbol.ip,16));
+  }
+
+  /* ip based call paths
   QSqlQuery getIdOfIp;
   prepare(getIdOfIp,"SELECT id from allocation_symbols where ip = ?");
   getIdOfIp.bindValue(0,callpathSymbol.ip);
@@ -436,18 +445,47 @@ long long insertCallpathSymbolInfo(const CallpathSymbolInfoRaw& callpathSymbol, 
       //returned two results
     }
   }
+  */
+
+  // line and file based call paths
+  long long symbolId = -1;
+  static QHash<QPair<QString,int>,long long> cache;
+  auto it = cache.find(QPair<QString,int>(lineInfo.file,lineInfo.line));
+  if(it != cache.end())
+  {
+    symbolId = it.value();
+  }
   else
   {
-    QSqlQuery insertNewAllocationSymbol;
-    prepare(insertNewAllocationSymbol,"INSERT INTO allocation_symbols \
-    (ip, dso_id, name, offset) \
-    VALUES (?,?,?,?) ");
-    insertNewAllocationSymbol.bindValue(0,callpathSymbol.ip);
-    insertNewAllocationSymbol.bindValue(1,dsoId);
-    insertNewAllocationSymbol.bindValue(2,callpathSymbol.name);
-    insertNewAllocationSymbol.bindValue(3,callpathSymbol.offset);
-    insertNewAllocationSymbol.exec();
+    if(lineInfo.line != -1)
+    {
+      QSqlQuery insertNewAllocationSymbol;
+      prepare(insertNewAllocationSymbol,"INSERT INTO allocation_symbols \
+      (ip, dso_id, name, offset, file, line, inlinedBy) \
+      VALUES (?,?,?,?,?,?,?) ");
+      insertNewAllocationSymbol.bindValue(0,callpathSymbol.ip);
+      insertNewAllocationSymbol.bindValue(1,dsoId);
+      insertNewAllocationSymbol.bindValue(2,lineInfo.function);
+      insertNewAllocationSymbol.bindValue(3,callpathSymbol.offset);
+      insertNewAllocationSymbol.bindValue(4,lineInfo.file);
+      insertNewAllocationSymbol.bindValue(5,lineInfo.line);
+      insertNewAllocationSymbol.bindValue(6,lineInfo.inlinedBy);
+      insertNewAllocationSymbol.exec();
+    }
+    else
+    {
+      QSqlQuery insertNewAllocationSymbol;
+      prepare(insertNewAllocationSymbol,"INSERT INTO allocation_symbols \
+      (ip, dso_id, name, offset) \
+      VALUES (?,?,?,?) ");
+      insertNewAllocationSymbol.bindValue(0,callpathSymbol.ip);
+      insertNewAllocationSymbol.bindValue(1,dsoId);
+      insertNewAllocationSymbol.bindValue(2,callpathSymbol.name);
+      insertNewAllocationSymbol.bindValue(3,callpathSymbol.offset);
+      insertNewAllocationSymbol.exec();
+    }
     symbolId = getLastInsertedId(db);
+    cache.insert(QPair<QString,int>(lineInfo.file,lineInfo.line),symbolId);
   }
   return symbolId;
 }
@@ -509,6 +547,7 @@ void readAllocationFile(const std::string& file, QSqlDatabase& db)
 {
   db.exec("CREATE INDEX IF NOT EXISTS idx_ip on allocation_symbols(ip)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_address_start on allocations(address_start)");
+  //db.exec("CREATE INDEX IF NOT EXISTS idx_file_line on allocation_symbols(file,line)");
   db.commit();
   db.exec("BEGIN TRANSACTION");
   std::ifstream infile(file);
@@ -553,19 +592,6 @@ void readAllocationFile(const std::string& file, QSqlDatabase& db)
   }
   db.exec("END TRANSACTION");
 }
-
-/*
-void readAllocationFileParallel(const std::string &file, const QSqlDatabase &dbGlobal)
-{
-  static QMutex dbOpenMtx;
-  dbOpenMtx.lock();
-  QSqlDatabase db = QSqlDatabase::cloneDatabase(dbGlobal,QString::fromStdString(file));
-  dbOpenMtx.unlock();
-  db.open();
-  sqlitePerformanceSettings(db);
-  readAllocationFile(file,db);
-}
-*/
 
 void readAllocationTrackerFiles(QString dir, QSqlDatabase& db)
 {
@@ -697,7 +723,7 @@ void createViews(QSqlDatabase& db)
   select (select name from symbols where id = symbol_id) as `function`, \
   count(*)  as `count` from samples where memory_lock = \
   (select id from memory_lock where name = 'Locked') \
-  group by symbol_id having count(*) >= " + minSamplesStr + " order by count desc"));
+  group by symbol_id having count(*) >= " % minSamplesStr % " order by count desc"));
 
   db.exec(QString("CREATE VIEW `latency of allocations` AS \
   select allocation_id,   (address_end - address_start) / 1024 as `size [kb]`,\
@@ -709,7 +735,7 @@ void createViews(QSqlDatabase& db)
   cast (printf('%.2f', avg(weight) / (select cast(avg(weight) as float) from samples where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%'))) as float) as `latency contribution factor` \
   from samples left outer join allocations on samples.allocation_id = allocations.id \
   where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%') \
-  group by allocation_id having count(*) >= " + minSamplesStr + " order by sumWeight desc"));
+  group by allocation_id having count(*) >= " % minSamplesStr % " order by sumWeight desc"));
 
   db.exec(QString("CREATE VIEW IF NOT EXISTS `latency of allocation sites` AS \
   select allocations.call_path_id,  \
@@ -722,7 +748,7 @@ void createViews(QSqlDatabase& db)
   cast (printf('%.2f', avg(weight) / (select cast(avg(weight) as float) from samples where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%'))) as float) as `latency contribution factor` \
   from samples left outer join allocations on samples.allocation_id = allocations.id \
   where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%') \
-  group by allocations.call_path_id having numSamples >= " + minSamplesStr + " order by sumWeight desc"));
+  group by allocations.call_path_id having numSamples >= " % minSamplesStr % " order by sumWeight desc"));
 
   db.exec(QString("CREATE VIEW `latency of allocations and functions` AS select allocation_id, \
   (select name from symbols where id = symbol_id) as function, \
@@ -731,7 +757,7 @@ void createViews(QSqlDatabase& db)
   cast ( printf('%.2f',sum(weight)  *100 / (select cast( sum(weight)  as float)  from samples where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%'))) as float) as `latency %`, \
   cast ( printf('%.2f',avg(weight) / (select cast(avg(weight) as float) from samples where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%'))) as float) as `latency factor` \
   from samples where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%') \
-  group by allocation_id,function having count(*) >= " + minSamplesStr + " order by count desc"));
+  group by allocation_id,function having count(*) >= " % minSamplesStr % " order by count desc"));
 
   db.exec(QString("CREATE VIEW `latency of functions` AS select \
   (select name from symbols where id = symbol_id) as function, \
@@ -740,7 +766,7 @@ void createViews(QSqlDatabase& db)
   cast ( printf('%.2f',sum(weight)  *100 / (select cast( sum(weight)  as float) from samples where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%'))) as float)  as `latency %`, \
   cast ( printf('%.2f',avg(weight) / (select cast(avg(weight) as float) from samples where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%') )) as float) as `latency factor` \
   from samples where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%')  \
-  group by function having count(*) >= " + minSamplesStr + " order by count desc"));
+  group by function having count(*) >= " % minSamplesStr % " order by count desc"));
 
   db.exec(QString("CREATE VIEW `function profile` AS \
   select (select name from symbols where id = symbol_id) as `function`, \
@@ -748,7 +774,7 @@ void createViews(QSqlDatabase& db)
   (select id from selected_events where name like 'cpu/cpu-cycles%'))) as float) as `execution time %` \
   from samples where evsel_id = \
   (select id from selected_events where name like 'cpu/cpu-cycles%') \
-  group by symbol_id having count(*) >= " + minSamplesStr + " order by `execution time %` desc"));
+  group by symbol_id having count(*) >= " % minSamplesStr % " order by `execution time %` desc"));
 
   db.exec(QString("CREATE VIEW `IPC of functions` AS \
   select function, \
@@ -756,12 +782,12 @@ void createViews(QSqlDatabase& db)
   (select (select name from symbols where id = symbol_id) as `function`, \
   sum(period) as cycles from samples where evsel_id = \
   (select id from selected_events where name like 'cpu/cpu-cycles%') \
-  group by symbol_id having count(*) >= " + minSamplesStr + ") \
+  group by symbol_id having count(*) >= " % minSamplesStr % ") \
   inner join \
   (select (select name from symbols where id = symbol_id) as `function`, \
   sum(period) as instructions from samples where evsel_id = \
   (select id from selected_events where name like 'cpu/instructions%') \
-  group by symbol_id having count(*) >= " + minSamplesStr + ") using (function) \
+  group by symbol_id having count(*) >= " % minSamplesStr % ") using (function) \
   where function != 'unknown' \
   order by IPC asc"));
 

@@ -18,6 +18,7 @@ public:
 
   void setFunctions(QStringList items);
   void setObjects(const QStringList &items);
+  void setCallpaths(const QStringList &items);
 
 private slots:
   void on_exportToPdfPushButton_clicked();

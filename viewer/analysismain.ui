@@ -39,7 +39,7 @@
        <bool>true</bool>
       </property>
       <property name="currentIndex">
-       <number>0</number>
+       <number>2</number>
       </property>
       <widget class="QWidget" name="functionsTab">
        <attribute name="title">
@@ -315,6 +315,75 @@
         </item>
        </layout>
       </widget>
+      <widget class="QWidget" name="autoTab">
+       <attribute name="title">
+        <string>Auto Analysis</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_2">
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_3">
+          <item>
+           <spacer name="horizontalSpacer_4">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="runPushButton">
+            <property name="text">
+             <string> Run Analysis</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QTreeWidget" name="autoAnalysisResultsTreeWidget">
+          <column>
+           <property name="text">
+            <string notr="true">Performance Problems</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Severity</string>
+           </property>
+          </column>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_4">
+          <item>
+           <spacer name="horizontalSpacer_5">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="exportToPdfPushButton_3">
+            <property name="text">
+             <string>Export to PDF</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
      </widget>
     </item>
    </layout>
@@ -336,7 +405,6 @@
      <string>File</string>
     </property>
     <addaction name="actionOpen_Database"/>
-    <addaction name="actionSet_Executable"/>
    </widget>
    <addaction name="menuFile"/>
   </widget>
@@ -344,11 +412,6 @@
   <action name="actionOpen_Database">
    <property name="text">
     <string>Open Database</string>
-   </property>
-  </action>
-  <action name="actionSet_Executable">
-   <property name="text">
-    <string>Set Executable</string>
    </property>
   </action>
  </widget>

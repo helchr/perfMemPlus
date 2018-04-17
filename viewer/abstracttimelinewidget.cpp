@@ -18,14 +18,14 @@ void AbstractTimelineWidget::paintBackground(QPaintEvent *event)
   painter->fillRect(event->rect(),background);
 }
 
-unsigned long long AbstractTimelineWidget::scale(const unsigned long long x) const
+unsigned long long AbstractTimelineWidget::scale(const unsigned long long x)
 {
   double scale = (double) this->size().width() / (double) maxValue;
   unsigned long long drawPos = std::round((double)x * scale);
   return drawPos;
 }
 
-QString AbstractTimelineWidget::decodeTime(const unsigned long long value) const
+QString AbstractTimelineWidget::decodeTime(const unsigned long long value)
 {
   auto us = value / 1000;
   auto ms = us / 1000;

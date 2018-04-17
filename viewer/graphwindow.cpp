@@ -25,7 +25,6 @@ ui(new Ui::GraphWindow)
 GraphWindow::~GraphWindow()
 {
   delete ui;
-  delete chart;
 }
 
 void GraphWindow::populateComboBoxWithThreads()

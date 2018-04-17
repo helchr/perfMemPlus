@@ -40,7 +40,8 @@ SOURCES += \
     sqlutils.cpp \
     guiutils.cpp \
     timelineaxiswidget.cpp \
-    abstracttimelinewidget.cpp
+    abstracttimelinewidget.cpp \
+    autoanalysis.cpp
 
 HEADERS += \
         analysismain.h \
@@ -57,7 +58,8 @@ HEADERS += \
     sqlutils.h \
     guiutils.h \
     timelineaxiswidget.h \
-    abstracttimelinewidget.h
+    abstracttimelinewidget.h \
+    autoanalysis.h
 
 FORMS += \
         analysismain.ui \

@@ -19,8 +19,8 @@ protected:
   unsigned long long minValue = 0;
   QPainter* painter;
   virtual void paintEvent(QPaintEvent* event) = 0;
-  QString decodeTime(const unsigned long long value) const;
-  unsigned long long scale(const unsigned long long x) const;
+  QString decodeTime(const unsigned long long value);
+  unsigned long long scale(const unsigned long long x);
   void paintBackground(QPaintEvent *event);
 
 signals:

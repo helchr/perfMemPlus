@@ -40,9 +40,18 @@
       </layout>
      </widget>
      <widget class="QTableView" name="objectsTableView">
+      <property name="editTriggers">
+       <set>QAbstractItemView::NoEditTriggers</set>
+      </property>
       <property name="selectionBehavior">
        <enum>QAbstractItemView::SelectRows</enum>
       </property>
+      <property name="sortingEnabled">
+       <bool>true</bool>
+      </property>
+      <attribute name="verticalHeaderShowSortIndicator" stdset="0">
+       <bool>false</bool>
+      </attribute>
      </widget>
      <widget class="QTreeWidget" name="callPathTreeWidget">
       <property name="verticalScrollBarPolicy">

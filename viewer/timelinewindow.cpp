@@ -13,8 +13,8 @@ TimelineWindow::TimelineWindow(QWidget *parent) :
 QDialog(parent),
 ui(new Ui::TimelineWindow)
 {
-  this->setWindowFlags(Qt::Window);
-  ui->setupUi(this);
+ this->setWindowFlags(Qt::Window);
+ ui->setupUi(this);
 }
 
 TimelineWindow::TimelineWindow(const QStringList& items, const QString& dbPath, QWidget *parent) :
@@ -33,21 +33,21 @@ ui(new Ui::TimelineWindow)
 
   for(auto item : items)
   {
-    auto rList = getReadList(QStringList(item));
-    trimList(rList,min);
-    auto r = new TimelineWidget(this);
-    r->setPoints(rList,QColor(Qt::green));
-    r->setMaxValue(range);
-    ui->formLayout->addRow("Object " + item + " read:",r);
+   auto rList = getReadList(QStringList(item));
+   trimList(rList,min);
+   auto r = new TimelineWidget(this);
+   r->setPoints(rList,QColor(Qt::green));
+   r->setMaxValue(range);
+   ui->formLayout->addRow("Object " + item + " read:",r);
 
-    auto wList = getWriteList(QStringList(item));
-    trimList(wList,min);
-    auto w = new TimelineWidget(this);
-    w->setPoints(wList,QColor(Qt::red));
-    w->setMaxValue(range);
-    ui->formLayout->addRow("Object " + item + " write:",w);
+   auto wList = getWriteList(QStringList(item));
+   trimList(wList,min);
+   auto w = new TimelineWidget(this);
+   w->setPoints(wList,QColor(Qt::red));
+   w->setMaxValue(range);
+   ui->formLayout->addRow("Object " + item + " write:",w);
 
-    ui->formLayout->addRow(" ",(QWidget*)nullptr); // empty widget for spacing
+   ui->formLayout->addRow(" ",(QWidget*)nullptr); // empty widget for spacing
   }
 
   time = new TimelineAxisWidget(this);
@@ -57,10 +57,10 @@ ui(new Ui::TimelineWindow)
 
 void TimelineWindow::trimList(QList<unsigned long long>& list, const unsigned long long min) const
 {
-  for(auto& item : list)
-  {
-    item = item - min;
-  }
+    for(auto& item : list)
+    {
+      item = item - min;
+    }
 }
 
 TimelineWindow::~TimelineWindow()
@@ -104,7 +104,7 @@ QList<unsigned long long> TimelineWindow::getReadList(const QStringList& items) 
   (select id from memory_opcodes where name = \"Load\") and \
   (allocation_id in (" + sqlItems + ") " + nullClause + ") order by time asc");
   return getList(q);
-}
+ }
 
 QList<unsigned long long> TimelineWindow::getWriteList(const QStringList& items) const
 {
@@ -130,6 +130,6 @@ QList<unsigned long long> TimelineWindow::getList(const QString &query) const
 
 void TimelineWindow::on_exportToPdfPushButton_clicked()
 {
-  PdfWriter p;
-  p.writeWidgetToPdf(ui->widget);
+   PdfWriter p;
+   p.writeWidgetToPdf(ui->widget);
 }

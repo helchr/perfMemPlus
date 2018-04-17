@@ -10,6 +10,7 @@
 #include "memorycoherencywindow.h"
 #include "graphwindow.h"
 #include "guiutils.h"
+#include "autoanalysis.h"
 
 AnalysisMain::AnalysisMain(QWidget *parent) :
   QMainWindow(parent),
@@ -118,7 +119,6 @@ void AnalysisMain::loadDatabase(const QString& path)
 void AnalysisMain::showAllocationCallpathFromCallPathId(const int callpathId)
 {
   AllocationCallPathResolver acpr;
-  acpr.setExe(exePath);
   ui->treeWidget->clear();
   acpr.writeAllocationCallpathFromCallpathId(callpathId,ui->treeWidget);
   GuiUtils::resizeColumnsToContents(ui->treeWidget);
@@ -127,7 +127,6 @@ void AnalysisMain::showAllocationCallpathFromCallPathId(const int callpathId)
 void AnalysisMain::showAllocationCallpath(const int allocationId)
 {
   AllocationCallPathResolver acpr;
-  acpr.setExe(exePath);
   ui->treeWidget->clear();
   acpr.writeAllocationCallpath(allocationId,ui->treeWidget);
   GuiUtils::resizeColumnsToContents(ui->treeWidget);
@@ -142,16 +141,6 @@ void AnalysisMain::setDbPath(const QString &path)
 {
   dbPath = path;
   loadDatabase(path);
-}
-
-void AnalysisMain::setExePath(const QString &path)
-{
-  exePath = path;
-  auto sel = ui->objectsTableView->selectionModel()->selection();
-  if(sel.count() > 0)
-  {
-    objectsTableRowChanged();
-  }
 }
 
 void AnalysisMain::showError(const QSqlError &err)
@@ -169,17 +158,6 @@ void AnalysisMain::on_actionOpen_Database_triggered()
   {
     dbPath = fd.selectedFiles().first();
     loadDatabase(dbPath);
-  }
-}
-
-void AnalysisMain::on_actionSet_Executable_triggered()
-{
-  QFileDialog fd(this,"Select executable file");
-  fd.setAcceptMode(QFileDialog::AcceptOpen);
-  fd.setFileMode(QFileDialog::ExistingFile);
-  if(fd.exec())
-  {
-    exePath = fd.selectedFiles().first();
   }
 }
 
@@ -226,8 +204,12 @@ void AnalysisMain::on_showCacheObjectspushButton_clicked()
   auto sl = getSelectedObjects();
   if(!sl.empty())
   {
+      if(ui->checkBox->isChecked())
+    {
+      sl = getAllocationIdsFromCallPathIds(sl);
+    }
+
     MemoryLevelWindow* mlw = new MemoryLevelWindow(sl,MemoryLevelWindow::Objects,dbPath, this);
-    mlw->show();
     mlw->show();
   }
 }
@@ -251,7 +233,6 @@ void AnalysisMain::on_showObjectsAccessedByPushButton_clicked()
   if(!sl.empty())
   {
     auto w = new ObjectAccessedByFunctionWindow(sl, dbPath, this);
-    w->setExePath(exePath);
     w->show();
   }
 }
@@ -301,6 +282,11 @@ void AnalysisMain::on_showAccessTimelinePushButton_clicked()
   auto sl = getSelectedObjects();
   if(!sl.empty())
   {
+      if(ui->checkBox->isChecked())
+    {
+      sl = getAllocationIdsFromCallPathIds(sl);
+    }
+
     TimelineWindow* tmv = new TimelineWindow(sl,dbPath,this);
     tmv->show();
   }
@@ -338,7 +324,8 @@ void AnalysisMain::on_checkBox_stateChanged(int state)
 {
   if(state == 0)
   {
-    changeModel(ui->objectsTableView,modelObjects,modelObjectsSelectionModel);   }
+    changeModel(ui->objectsTableView,modelObjects,modelObjectsSelectionModel);
+  }
   else if(state == 2) // check box activated
   {
     changeModel(ui->objectsTableView,modelObjectsAllocationSites,modelObjectsAllocationSitesSelectionModel);
@@ -362,7 +349,14 @@ void AnalysisMain::on_showObjectCacheCoherencyPushButton_clicked()
   if(!sl.empty())
   {
     MemoryCoherencyWindow* mlw = new MemoryCoherencyWindow(dbPath, this);
-    mlw->setObjects(sl);
+    if(ui->checkBox->isChecked())
+    {
+      mlw->setCallpaths(sl);
+    }
+    else
+    {
+      mlw->setObjects(sl);
+    }
     mlw->show();
   }
 }
@@ -402,11 +396,7 @@ QStringList AnalysisMain::getSelectedObjects() const
     {
       sl.push_back(item.data(Qt::DisplayRole).toString());
     }
-    if(ui->checkBox->isChecked())
-    {
-      sl = getAllocationIdsFromCallPathIds(sl);
     }
-  }
   return sl;
 }
 
@@ -415,8 +405,183 @@ void AnalysisMain::on_timeAccessObjectsDiagramPushButton_clicked()
   auto sl = getSelectedObjects();
   if(!sl.empty())
   {
+    if(ui->checkBox->isChecked())
+    {
+      sl = getAllocationIdsFromCallPathIds(sl);
+    }
     auto gw = new GraphWindow(dbPath, this);
     gw->setAllocations(sl);
     gw->show();
   }
+}
+
+void AnalysisMain::on_runPushButton_clicked()
+{
+  ui->autoAnalysisResultsTreeWidget->clear();
+  AutoAnalysis aa;
+  bool considerObjects = true;
+  auto results = aa.run(considerObjects);
+  if(considerObjects)
+  {
+    QMap<QString,QTreeWidgetItem*> functionMap;
+    for(auto result : results)
+    {
+      if(result.accessPattern || result.bandwidth || result.workingSetL1 || result.workingSetL2 || result.falseSharing)
+      {
+        QTreeWidgetItem* objectItem;
+        if(functionMap.contains(result.function))
+        {
+          auto functionItem = *(functionMap.find(result.function));
+          QStringList info;
+          //info << "Object allocation call path id: " + QString::number(result.callPathId);
+          info << "Object id "+ QString::number(result.callPathId) + " allocated at: " + getShortFileAndLineOfCallpathId(result.callPathId);
+          info << "Latency contribution in function: " + QString::number(result.objectLatencyPercent,'f',1) + "%";
+          objectItem = new QTreeWidgetItem(functionItem,info);
+          functionItem->addChild(objectItem);
+          objectItem->setExpanded(true);
+        }
+        else
+        {
+          QStringList info;
+          info << "Function: " + result.function;
+          info << "Execution time contribution: " + QString::number(result.functionExectimePercent,'f',1) + "%";
+          auto functionItem = new QTreeWidgetItem(ui->autoAnalysisResultsTreeWidget,info);
+          ui->autoAnalysisResultsTreeWidget->addTopLevelItem(functionItem);
+          QStringList objInfo;
+          objInfo << "Object id " + QString::number(result.callPathId) + " alloced at: " + getShortFileAndLineOfCallpathId(result.callPathId);
+          objInfo << "Latency contribution in function: " + QString::number(result.objectLatencyPercent,'f',1) + "%";
+          objectItem = new QTreeWidgetItem(functionItem,objInfo);
+          functionItem->addChild(objectItem);
+          functionMap.insert(result.function,functionItem);
+          functionItem->setExpanded(true);
+          objectItem->setExpanded(true);
+        }
+        if(result.accessPattern)
+        {
+          QStringList info;
+          info << "Array Access Pattern";
+          auto probItem = new QTreeWidgetItem(objectItem,info);
+          objectItem->addChild(probItem);
+        }
+        if(result.falseSharing)
+        {
+          QStringList info;
+          info << "False Sharing" << "HITM Accesses: " + QString::number(result.hitmPercent,'f',1) + "%";
+          auto probItem = new QTreeWidgetItem(objectItem,info);
+          objectItem->addChild(probItem);
+        }
+        if(result.bandwidth)
+        {
+          QStringList info;
+          info << "Main memory bandwidth limit";
+          info << "Latency limit exceeded by " + QString::number(result.latencyOverLimitPercent,'f',1) + "%";
+          auto probItem = new QTreeWidgetItem(objectItem,info);
+          objectItem->addChild(probItem);
+        }
+        if(result.workingSetL1)
+        {
+          QStringList info;
+          info << "Working set too large for L1 Cache" ;
+          info << "L1 hit rate: " + QString::number(result.l1HitRate,'f',1) + "%";
+          auto probItem = new QTreeWidgetItem(objectItem,info);
+          objectItem->addChild(probItem);
+        }
+        if(result.workingSetL2)
+        {
+          QStringList info;
+          info << "Working set too large for L2 Cache" ;
+          info << "L2 hit rate: " + QString::number(result.l2HitRate,'f',1) + "%";
+          auto probItem = new QTreeWidgetItem(objectItem,info);
+          objectItem->addChild(probItem);
+        }
+      }
+    }
+  }
+  else
+  {
+    for(auto result : results)
+    {
+      if(result.accessPattern || result.bandwidth || result.workingSetL1 || result.workingSetL2 || result.falseSharing)
+      {
+        QStringList info;
+        info << result.function;
+        auto functionItem = new QTreeWidgetItem(ui->autoAnalysisResultsTreeWidget,info);
+        ui->autoAnalysisResultsTreeWidget->addTopLevelItem(functionItem);
+        if(result.accessPattern)
+        {
+          QStringList info;
+          info << "Array Access Pattern";
+          auto probItem = new QTreeWidgetItem(functionItem,info);
+          functionItem->addChild(probItem);
+        }
+        if(result.falseSharing)
+        {
+          QStringList info;
+          info << "False Sharing" << "Hitm Count: " + result.hitmCount;
+          auto probItem = new QTreeWidgetItem(functionItem,info);
+          functionItem->addChild(probItem);
+        }
+        if(result.bandwidth)
+        {
+          QStringList info;
+          info << "Main memory bandwidth limit" ;
+          auto probItem = new QTreeWidgetItem(functionItem,info);
+          functionItem->addChild(probItem);
+        }
+        if(result.workingSetL1)
+        {
+          QStringList info;
+          info << "Working set too large for L1 Cache" ;
+          auto probItem = new QTreeWidgetItem(functionItem,info);
+          functionItem->addChild(probItem);
+        }
+        if(result.workingSetL2)
+        {
+          QStringList info;
+          info << "Working set too large for L2 Cache" ;
+          auto probItem = new QTreeWidgetItem(functionItem,info);
+          functionItem->addChild(probItem);
+        }
+      }
+    }
+  }
+  QTreeWidgetItemIterator it(ui->autoAnalysisResultsTreeWidget);
+  if(*it == nullptr)
+  {
+    QStringList info;
+    info << "No performance problems found" ;
+    auto noItem = new QTreeWidgetItem(ui->autoAnalysisResultsTreeWidget,info);
+    ui->autoAnalysisResultsTreeWidget->addTopLevelItem(noItem);
+  }
+  GuiUtils::resizeColumnsToContents(ui->autoAnalysisResultsTreeWidget);
+}
+
+void AnalysisMain::on_exportToPdfPushButton_3_clicked()
+{
+  PdfWriter p(dbPath);
+  p.writeWidgetToPdf(ui->autoAnalysisResultsTreeWidget);
+}
+
+QPair<QString,int> AnalysisMain::getFileAndLineOfCallpathId(int id)
+{
+  QSqlQuery q;
+  q.prepare("select file, line from allocation_symbols where id = \
+  (select allocation_symbol_id from allocation_call_paths where id = ?)");
+  q.bindValue(0,id);
+  q.exec();
+  QPair<QString,int> result("",-1);
+  if(q.next())
+  {
+    result.first = q.value(0).toString();
+    result.second = q.value(1).toInt();
+  }
+  return result;
+}
+
+QString AnalysisMain::getShortFileAndLineOfCallpathId(int id)
+{
+  auto longName = getFileAndLineOfCallpathId(id);
+  QString path = longName.first;
+  auto filename = path.split("/").last();
+  return filename + ":" + QString::number(longName.second);
 }

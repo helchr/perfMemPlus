@@ -12,7 +12,6 @@ int main(int argc, char *argv[])
   parser.setApplicationDescription("View the results of a PerfMemPlus profiling session");
   parser.addHelpOption();
   parser.addPositionalArgument("dbPath","Path to database file");
-  parser.addPositionalArgument("exePath","Path to analyzed executable");
   parser.process(a);
   AnalysisMain w;
 
@@ -22,11 +21,6 @@ int main(int argc, char *argv[])
   {
     dbPath = arguments.first();
     w.setDbPath(dbPath);
-  }
-  if(arguments.size() > 1)
-  {
-    auto exePath = arguments.at(1);
-    w.setExePath(exePath);
   }
   w.show();
   if(dbPath != "")
