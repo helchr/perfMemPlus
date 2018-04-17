@@ -36,9 +36,9 @@ void AnalysisMain::loadDatabase(const QString& path)
   modelFunctions->setHeaderData(modelFunctions->fieldIndex("function"), Qt::Horizontal, tr("Function"));
   modelFunctions->setHeaderData(modelFunctions->fieldIndex("execution time %"), Qt::Horizontal, tr("Execution Time %"));
   modelFunctions->setHeaderData(modelFunctions->fieldIndex("IPC"), Qt::Horizontal, tr("IPC"));
-  modelFunctions->setHeaderData(modelFunctions->fieldIndex("latency"), Qt::Horizontal, tr("Average Lateny"));
-  modelFunctions->setHeaderData(modelFunctions->fieldIndex("latency %"), Qt::Horizontal, tr("Lateny %"));
-  modelFunctions->setHeaderData(modelFunctions->fieldIndex("latency factor"), Qt::Horizontal, tr("Lateny Factor"));
+  modelFunctions->setHeaderData(modelFunctions->fieldIndex("latency"), Qt::Horizontal, tr("Average Latency"));
+  modelFunctions->setHeaderData(modelFunctions->fieldIndex("latency %"), Qt::Horizontal, tr("Latency %"));
+  modelFunctions->setHeaderData(modelFunctions->fieldIndex("latency factor"), Qt::Horizontal, tr("Latency Factor"));
 
   if (!modelFunctions->select())
   {
