@@ -111,6 +111,15 @@ bool isInCallchain(const QString& line)
 
 bool isCallchainStart(const QString& line)
 {
+	if (line == QLatin1String("callchain"))
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+	/*
   auto idx = line.indexOf(' ',0);
   if(idx != -1)
   {
@@ -120,6 +129,7 @@ bool isCallchainStart(const QString& line)
     }
   }
   return false;
+	*/
 }
 
 bool isAllocationInfo(const QString& line)
@@ -552,32 +562,21 @@ void readAllocationFile(const std::string& file, QSqlDatabase& db)
   db.exec("BEGIN TRANSACTION");
   std::ifstream infile(file);
   std::string line;
-  bool inCallchain = false;
   int tid = getTid(QString::fromStdString(file));
   std::vector<long long> callpathSymbolIds;
   while (std::getline(infile,line))
   {
     if(isCallchainStart(QString::fromStdString(line)))
     {
-      if(inCallchain)
-      {
-        //error
-        break;
-      }
-      else
-      {
-        inCallchain = true;
         continue;
-      }
     }
-    else if (inCallchain)
+    else
     {
       AllocationInfoRaw tmp;
       tmp.tid = tid;
       bool readOk = readAllocationInfo(line, tmp);
 
       if(readOk)   {
-        inCallchain = false;
         tmp.callpathId = insertCallpath(callpathSymbolIds,db);
         processAllocationInfo(tmp,db);
         callpathSymbolIds.clear();

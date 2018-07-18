@@ -21,7 +21,7 @@
 #define MAX_TID 512                /* Max number of tids to profile */
 
 #define USE_FRAME_POINTER   0      /* Use Frame Pointers to compute the stack trace (faster) */
-#define CALLCHAIN_SIZE      5      /* stack trace length */
+#define CALLCHAIN_SIZE      9      /* stack trace length */
 #define RESOLVE_SYMBS       1      /* Resolve symbols at the end of the execution; quite costly */
                                    /* If this takes too much time, you can deactivate it or stop memprof before doing it */
 
@@ -279,6 +279,10 @@ extern "C" int posix_memalign(void **ptr, size_t align, size_t sz) {
 }
 
 extern "C" void free(void *p) {
+	 if(p == 0) {
+     libc_free(p);
+		 return;
+	 }
    struct log *log_arr = get_log();
    if(log_arr) {
    log_arr->rdt = get_nsecs();
@@ -436,7 +440,9 @@ bye(void) {
       FILE *dump = open_file(tids[i]);
       for(j = 0; j < log_index[i]; j++) {
          struct log *l = &log_arr[i][j];
-         fprintf(dump, "%lu callchain\n", l->rdt);
+				 if(l->entry_type != 0) {
+            fprintf(dump, "callchain\n");
+				 }
          // k=2, we skip get_trace and the function (malloc, ...) that called it
 #if RESOLVE_SYMBS
          _in_trace = 1;
