@@ -16,6 +16,10 @@ float PercentDelegate::relativeCost(const QModelIndex &index) const
 
 QString PercentDelegate::displayText(const QModelIndex &index, const QLocale &locale) const
 {
+    if(index.data().canConvert<double>())
+    {
+      return QString::number(index.data().toDouble(),'f',2);
+    }
     return index.data().toString();
 }
 
@@ -35,7 +39,7 @@ void PercentDelegate::paint(QPainter *painter, const QStyleOptionViewItem &optio
   // Draw bar.
   float ratio = qBound(0.0f, relativeCost(index), 1.0f);
   QRect barRect = opt.rect;
-  barRect.setWidth(opt.rect.width() * ratio);
+  barRect.setWidth(static_cast<int>(std::round(opt.rect.width() * ratio)));
   painter->setPen(Qt::NoPen);
   painter->setBrush(QBrush(QColor::fromRgba(0xf0fff080),Qt::SolidPattern));
   painter->drawRect(barRect);
