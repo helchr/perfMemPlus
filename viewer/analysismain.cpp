@@ -11,12 +11,20 @@
 #include "graphwindow.h"
 #include "guiutils.h"
 #include "autoanalysis.h"
+#include "treemodel.h"
+#include "treeitem.h"
+#include <QThread>
+#include <qtconcurrentrun.h>
 
 AnalysisMain::AnalysisMain(QWidget *parent) :
   QMainWindow(parent),
   ui(new Ui::AnalysisMain)
 {
   ui->setupUi(this);
+  queryCallstack = new QFutureWatcher<TreeItem*>(this);
+  queryAutoAnalysis = new QFutureWatcher<QList<Result>>(this);
+  connect(queryCallstack,&QFutureWatcher<TreeItem*>::finished,this,&AnalysisMain::displayCallstack);
+  connect(queryAutoAnalysis,&QFutureWatcher<QList<Result>*>::finished,this,&AnalysisMain::displayAutoAnalysisResult);
 }
 
 void AnalysisMain::loadDatabase(const QString& path)
@@ -102,6 +110,11 @@ void AnalysisMain::loadDatabase(const QString& path)
   connect(modelObjectsAllocationSitesSelectionModel, SIGNAL(selectionChanged(QItemSelection ,QItemSelection)),
           this, SLOT(objectsCallPathTableRowChanged()));
 
+  connect(ui->functionsTableView->selectionModel(), SIGNAL(selectionChanged(QItemSelection, QItemSelection)),
+          this, SLOT(functionsTableRowChanged()));
+
+  ui->callerTreeView->setItemDelegateForColumn(1,new PercentDelegate(ui->callerTreeView));
+
   changeModel(ui->objectsTableView,modelObjects,modelObjectsSelectionModel);
 
   QSqlQuery q("select count(*) from samples");
@@ -121,7 +134,7 @@ void AnalysisMain::showAllocationCallpathFromCallPathId(const int callpathId)
   AllocationCallPathResolver acpr;
   ui->treeWidget->clear();
   acpr.writeAllocationCallpathFromCallpathId(callpathId,ui->treeWidget);
-  GuiUtils::resizeColumnsToContents(ui->treeWidget);
+  GuiUtils::resizeColumnsToContents(ui->treeWidget,9000);
 }
 
 void AnalysisMain::showAllocationCallpath(const int allocationId)
@@ -129,7 +142,7 @@ void AnalysisMain::showAllocationCallpath(const int allocationId)
   AllocationCallPathResolver acpr;
   ui->treeWidget->clear();
   acpr.writeAllocationCallpath(allocationId,ui->treeWidget);
-  GuiUtils::resizeColumnsToContents(ui->treeWidget);
+  GuiUtils::resizeColumnsToContents(ui->treeWidget,9000);
 }
 
 AnalysisMain::~AnalysisMain()
@@ -174,6 +187,21 @@ void AnalysisMain::objectsTableRowChanged()
     ui->treeWidget->clear();
   }
 }
+
+void AnalysisMain::functionsTableRowChanged()
+{
+  auto selectedRows = ui->functionsTableView->selectionModel()->selectedRows(0);
+  if(selectedRows.count() == 1)
+  {
+    auto id = selectedRows.first().data(Qt::DisplayRole).toString();
+    showCallpath(id);
+  }
+  else
+  {
+    ui->treeWidget->clear();
+  }
+}
+
 
 void AnalysisMain::objectsCallPathTableRowChanged()
 {
@@ -417,16 +445,33 @@ void AnalysisMain::on_timeAccessObjectsDiagramPushButton_clicked()
 
 void AnalysisMain::on_runPushButton_clicked()
 {
+  if(queryAutoAnalysis->isRunning())
+  {
+    queryAutoAnalysis->cancel();
+    queryAutoAnalysis->waitForFinished();
+  }
   ui->autoAnalysisResultsTreeWidget->clear();
   AutoAnalysis aa;
   bool considerObjects = true;
-  auto results = aa.run(considerObjects);
+  queryAutoAnalysis->setFuture(QtConcurrent::run(aa,&AutoAnalysis::run,considerObjects));
+  ui->runPushButton->setDisabled(true);
+  ui->runPushButton->setText("Analysis Running");
+}
+
+void AnalysisMain::displayAutoAnalysisResult()
+{
+  auto results = queryAutoAnalysis->result();
+  ui->runPushButton->setText("Run Analyis");
+  ui->runPushButton->setEnabled(true);
+  auto considerObjects = true;
   if(considerObjects)
   {
     QMap<QString,QTreeWidgetItem*> functionMap;
     for(auto result : results)
     {
-      if(result.accessPattern || result.bandwidth || result.workingSetL1 || result.workingSetL2 || result.falseSharing)
+      if(result.accessPattern || result.l1Bandwidth.problem || result.workingSetL1 || result.workingSetL2 || \
+      result.falseSharing || result.l2Bandwidth.problem || result.l3Bandwidth.problem || result.dramBandwidth.problem || \
+      result.remoteDramBandwidth.problem)
       {
         QTreeWidgetItem* objectItem;
         if(functionMap.contains(result.function))
@@ -444,7 +489,7 @@ void AnalysisMain::on_runPushButton_clicked()
         {
           QStringList info;
           info << "Function: " + result.function;
-          info << "Execution time contribution: " + QString::number(result.functionExectimePercent,'f',1) + "%";
+          info << "Execution time contribution: " + QString::number(result.functionExectimePercent,'f',1) + "% " + "Memory Stall Cycles: " + QString::number(result.memoryStallCycles);
           auto functionItem = new QTreeWidgetItem(ui->autoAnalysisResultsTreeWidget,info);
           ui->autoAnalysisResultsTreeWidget->addTopLevelItem(functionItem);
           QStringList objInfo;
@@ -466,23 +511,31 @@ void AnalysisMain::on_runPushButton_clicked()
         if(result.falseSharing)
         {
           QStringList info;
-          info << "False Sharing" << "HITM Accesses: " + QString::number(result.hitmPercent,'f',1) + "%";
+          //info << "False Sharing" << "HITM Accesses: " + QString::number(result.hitmPercent,'f',1) + "%";
+          info << "False Sharing" << "Latency Savings: " + QString::number(result.falseSharingLatencySavings,'e',1);
           auto probItem = new QTreeWidgetItem(objectItem,info);
           objectItem->addChild(probItem);
         }
-        if(result.bandwidth)
+        if(result.trueSharing)
         {
           QStringList info;
-          info << "Main memory bandwidth limit";
-          info << "Latency limit exceeded by " + QString::number(result.latencyOverLimitPercent,'f',1) + "%";
+          info << "True Sharing" << "Latency Savings: " + QString::number(result.falseSharingLatencySavings,'e',1);
           auto probItem = new QTreeWidgetItem(objectItem,info);
           objectItem->addChild(probItem);
         }
-        if(result.workingSetL1)
+        if(result.modifiedCachelines)
+        {
+          QStringList info;
+          info << "Modified Cachelines" << "Latency Savings: " + QString::number(result.falseSharingLatencySavings,'e',1);
+          auto probItem = new QTreeWidgetItem(objectItem,info);
+          objectItem->addChild(probItem);
+        }
+       if(result.workingSetL1)
         {
           QStringList info;
           info << "Working set too large for L1 Cache" ;
-          info << "L1 hit rate: " + QString::number(result.l1HitRate,'f',1) + "%";
+          //info << "L1 hit rate: " + QString::number(result.l1HitRate,'f',1) + "%";
+          info << "Latency Savings: " + QString::number(result.l1LatencySavings,'e',1);
           auto probItem = new QTreeWidgetItem(objectItem,info);
           objectItem->addChild(probItem);
         }
@@ -490,13 +543,21 @@ void AnalysisMain::on_runPushButton_clicked()
         {
           QStringList info;
           info << "Working set too large for L2 Cache" ;
-          info << "L2 hit rate: " + QString::number(result.l2HitRate,'f',1) + "%";
+          //info << "L2 hit rate: " + QString::number(result.l2HitRate,'f',1) + "%";
+          info << "Latency Savings: " + QString::number(result.l2LatencySavings,'e',1);
           auto probItem = new QTreeWidgetItem(objectItem,info);
           objectItem->addChild(probItem);
         }
+        //showBandwidthResults(result.l1Bandwidth,objectItem);
+        //showBandwidthResults(result.l2Bandwidth,objectItem);
+        //showBandwidthResults(result.l3Bandwidth,objectItem);
+        //showBandwidthResults(result.remoteCacheBandwidth,objectItem);
+        showBandwidthResults(result.dramBandwidth,objectItem);
+        showBandwidthResults(result.remoteDramBandwidth,objectItem);
       }
     }
   }
+  /*
   else
   {
     for(auto result : results)
@@ -545,6 +606,7 @@ void AnalysisMain::on_runPushButton_clicked()
       }
     }
   }
+  */
   QTreeWidgetItemIterator it(ui->autoAnalysisResultsTreeWidget);
   if(*it == nullptr)
   {
@@ -554,6 +616,151 @@ void AnalysisMain::on_runPushButton_clicked()
     ui->autoAnalysisResultsTreeWidget->addTopLevelItem(noItem);
   }
   GuiUtils::resizeColumnsToContents(ui->autoAnalysisResultsTreeWidget);
+}
+
+void AnalysisMain::showBandwidthResults(const BandwidthResult &r, const auto& objectItem)
+{
+  if(r.problem)
+  {
+    QStringList info;
+    info << r.memory + " bandwidth limit";
+    //info << "Latency limit exceeded by " + QString::number(result.latencyOverLimitPercent,'f',1) + "%";
+    if(r.lowSampleCount)
+    {
+      info += " Warning: low sample count";
+    }
+    info << "Latency savings:" + QString::number(r.latencySavings,'e',1);
+    auto probItem = new QTreeWidgetItem(objectItem,info);
+    objectItem->addChild(probItem);
+  }
+
+}
+
+void AnalysisMain::displayCallstack()
+{
+  // called when callstack data is ready to be displayed
+  auto root = queryCallstack->result();
+  TreeModel* model = new TreeModel(root,ui->callerTreeView);
+  delete ui->callerTreeView->model();
+  ui->callerTreeView->setModel(model);
+  GuiUtils::resizeColumnsToContents(ui->callerTreeView);
+}
+
+void AnalysisMain::showCallpath(const QString &functionName)
+{
+  if(queryCallstack->isRunning())
+  {
+    queryCallstack->cancel();
+    queryCallstack->waitForFinished();
+  }
+  queryCallstack->setFuture(QtConcurrent::run(this,&AnalysisMain::printCallstack,functionName));
+  auto tmpRoot = new TreeItem({"Querying Callstack ..."});
+  auto tmpModel = new TreeModel(tmpRoot);
+  delete ui->callerTreeView->model();
+  ui->callerTreeView->setModel(tmpModel);
+}
+
+inline uint qHash(const std::vector<QString> &key, uint seed = 0)
+{
+    return qHashRange(key.begin(), key.end(), seed);
+}
+
+QString AnalysisMain::space(long long level) const
+{
+  QString s;
+  for(long long i = 0; i < level; i++)
+  {
+    s += "  ";
+  }
+  return s;
+}
+
+
+
+void AnalysisMain::printCallstackEntry(long long id, long long level, QVector<QString>& callStack)
+{
+  QTextStream out;
+  QSqlQuery getCallstackEntry;
+  getCallstackEntry.prepare("select parent_id, symbol, ip from call_paths_view where id = ? ");
+  getCallstackEntry.bindValue(0,id);
+  getCallstackEntry.exec();
+  while(getCallstackEntry.next())
+    {
+      auto name = getCallstackEntry.value(1).toString();
+      auto parentId = getCallstackEntry.value(0).toLongLong();
+      auto ip = getCallstackEntry.value(3).toString();
+      //out << space(level) << name << endl;
+      //callStack.append(space(level) + name);
+      callStack.append(name);
+      if(parentId != 0)
+      {
+          printCallstackEntry(parentId,level+1,callStack);
+      }
+  }
+}
+
+TreeItem* AnalysisMain::printCallstack(QString fName)
+{
+  QSqlQuery getCallpathId("select call_path_id, 100.0 * sum(weight) / (select sum (weight) from samples where symbol_id = (select id from symbols where name = ?)) as latencyPercent from samples where symbol_id = (select id from symbols where name = ?) group by call_path_id order by latencyPercent desc");
+  getCallpathId.bindValue(0,fName);
+  getCallpathId.bindValue(1,fName);
+  getCallpathId.exec();
+  QHash<QVector<QString>,float> callStacks;
+  while(getCallpathId.next())
+  {
+    QVector<QString> callStack;
+    printCallstackEntry(getCallpathId.value(0).toLongLong(),0,callStack);
+    if(callStacks.find(callStack) == callStacks.end())
+    {
+      callStacks.insert(callStack,getCallpathId.value(1).toFloat());
+    }
+    else
+    {
+      callStacks[callStack] += getCallpathId.value(1).toFloat();
+    }
+  }
+  QTextStream out(stdout);
+
+  QList<QVariant> l = {"Caller","Latency %"};
+  auto root = new TreeItem(l);
+
+  QHashIterator<QVector<QString>,float> i(callStacks);
+  while (i.hasNext())
+  {
+    i.next();
+    auto callStack = i.key();
+    TreeItem* curTreeItem = root;
+    int j = 0;
+    while(j < callStack.size())
+    {
+       auto callStackEntry = callStack[j];
+         //find child with same name
+         bool found = false;
+         for(int childIt = 0; childIt < curTreeItem->childCount(); childIt++)
+         {
+           if(curTreeItem->child(childIt)->data(0) == callStackEntry)
+           {
+             curTreeItem = curTreeItem->child(childIt);
+             auto val = curTreeItem->data(1).toFloat();
+             val += i.value();
+             curTreeItem->setData(1,val);
+             j++;
+             found = true;
+             break;
+           }
+         }
+         if(!found)
+         {
+         // no child with name found
+         QList<QVariant> list;
+         list << callStackEntry << i.value();
+         curTreeItem->appendChild(new TreeItem(list,curTreeItem));
+         curTreeItem = curTreeItem->child(0);
+         j++;
+       }
+     }
+   }
+  return root;
 }
 
 void AnalysisMain::on_exportToPdfPushButton_3_clicked()

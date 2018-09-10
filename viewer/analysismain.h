@@ -9,12 +9,17 @@ namespace Ui {
   class AnalysisMain;
 }
 
+struct BandwidthResult;
+class TreeItem;
+class Result;
+
+
 class AnalysisMain : public QMainWindow
 {
   Q_OBJECT
 
 public:
-  explicit AnalysisMain(QWidget *parent = 0);
+  explicit AnalysisMain(QWidget *parent = nullptr);
   ~AnalysisMain();
   void setDbPath(const QString& path);
 
@@ -27,6 +32,7 @@ public slots:
 private slots:
   void objectsTableRowChanged();
   void objectsCallPathTableRowChanged();
+  void functionsTableRowChanged();
   void on_actionOpen_Database_triggered();
   void on_functionsCachePushButton_clicked();
   void on_showCacheObjectspushButton_clicked();
@@ -41,6 +47,7 @@ private slots:
   void on_timeAccessObjectsDiagramPushButton_clicked();
   void on_runPushButton_clicked();
   void on_exportToPdfPushButton_3_clicked();
+  void displayCallstack();
 
 private:
   Ui::AnalysisMain *ui;
@@ -50,6 +57,8 @@ private:
   QSqlRelationalTableModel *modelObjectsAllocationSites;
   QItemSelectionModel *modelObjectsAllocationSitesSelectionModel;
   QString dbPath;
+  QFutureWatcher<TreeItem*>* queryCallstack;
+  QFutureWatcher<QList<Result>>* queryAutoAnalysis;
 
   void showError(const QSqlError &err);
   void loadDatabase(const QString& path);
@@ -64,6 +73,12 @@ private:
   QStringList getSelectedObjects() const;
   QPair<QString, int> getFileAndLineOfCallpathId(int id);
   QString getShortFileAndLineOfCallpathId(int id);
+  void showBandwidthResults(const BandwidthResult& r,const auto& objectItem);
+  void showCallpath(const QString& functionName);
+  TreeItem *printCallstack(QString fName);
+  void printCallstackEntry(long long id, long long level, QVector<QString> &callStack);
+  QString space(long long level) const;
+  void displayAutoAnalysisResult();
 };
 
 #endif // ANALYSISMAIN_H

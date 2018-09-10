@@ -25,11 +25,12 @@ void AutoAnalysis::createIndexes() const
   q.exec("create index if not exists idx_samples_evsel_id on samples(memory_level)");
   q.exec("create index if not exists idx_samples_evsel_id on samples(memory_snoop)");
   q.exec("create index if not exists idx_samples_allocation_id on samples(allocation_id)");
+  q.exec("create index if not exists idx_samples_to_ip on samples(to_ip)");
   q.exec("create index if not exists idx_allocations_call_path_id on allocations(call_path_id)");
   q.exec("create index if not exists idx_allocations_id on allocations(id)");
 }
 
-QList<AutoAnalysis::Result> AutoAnalysis::run(bool considerObjects)
+QList<Result> AutoAnalysis::run(bool considerObjects)
 {
  auto fncts = getOffendingFunctions();
  if(considerObjects)
@@ -39,7 +40,7 @@ QList<AutoAnalysis::Result> AutoAnalysis::run(bool considerObjects)
  }
  else
  {
-   return QList<AutoAnalysis::Result>();
+   return QList<Result>();
  }
 }
 
@@ -70,9 +71,9 @@ QList<int> AutoAnalysis::getMostAccessedObjectsOfFunction(const int symbolId) co
 {
   QList<int> objects;
   float sampleCountLimit = 90.9;
-  float sampleLatencyLimit = 99.9;
+  float sampleLatencyLimit = 99.999;
   unsigned int minLatency = 32;
-  float minLatencyContribution = 0.1;
+  float minLatencyContribution = 0.001;
   QSqlQuery q("select allocations.call_path_id, 100.0 * count (*) / \
   (select count(*) from samples where evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") \
   and symbol_id = ? ), \
@@ -165,7 +166,7 @@ QString AutoAnalysis::symbolIdToFuctionName(const int symbolId) const
   return executeSingleStringQuery(q);
  }
 
-QList<AutoAnalysis::Result> AutoAnalysis::analyzeFunctionsWithObjects(const QList<int>& functions) const
+QList<Result> AutoAnalysis::analyzeFunctionsWithObjects(const QList<int>& functions) const
 {
   QList<Result> results;
   for(auto item : functions)
@@ -202,7 +203,7 @@ float AutoAnalysis::getObjectLatencyPercent(const int symbolId, const int alloca
   return executeSingleFloatQuery(q);
 }
 
-AutoAnalysis::Result AutoAnalysis::analyzeFunctionAndObject(const int symbolId, const int allocation) const
+Result AutoAnalysis::analyzeFunctionAndObject(const int symbolId, const int allocation) const
 {
   Result r;
   r.function = symbolIdToFuctionName(symbolId);
@@ -214,25 +215,47 @@ AutoAnalysis::Result AutoAnalysis::analyzeFunctionAndObject(const int symbolId, 
   auto sumHitm = getNumberOfHitmInFunction(symbolId,allocation);
   auto sumAccess = getNumberOfAccesses(symbolId,allocation);
   auto hitmPercent = 100.0 * (float)sumHitm / (float)sumAccess;
-  if(hitmPercent >= hitmLimit)
+  if(sumHitm >= hitmLimit)
   {
-    r.falseSharing = true;
+    if(isObjectWrittenByMultipleThreads(allocation))
+    {
+      if(areAddressesInObjectShared(allocation))
+      {
+        r.trueSharing = true;
+      }
+      else
+      {
+        r.falseSharing = true;
+      }
+    }
+    else
+    {
+      r.modifiedCachelines = true;
+    }
     r.hitmCount = sumHitm;
     r.hitmPercent = hitmPercent;
   }
+
+  auto levels = getHitmMemoryLevels(symbolId,allocation);
+  auto nonHitmLatency = getNonHimLatency(symbolId,allocation,levels);
+  auto hitmLatency = getHimLatency(symbolId,allocation);
+  auto samplerate = getSamplerate();
+  r.falseSharingLatencySavings = sumHitm * samplerate * (hitmLatency - nonHitmLatency);
 
   // check for latency
   auto latencyDram = getLatencyInDram(symbolId,allocation);
   auto latencyLfb = getLatencyInLfb(symbolId,allocation);
   auto dramSampleCount = getDramSampleCount(symbolId,allocation);
-  if(latencyDram >= dramLatencyLimit && dramSampleCount >= dramSampleCountLimit)
-  {
-    r.bandwidth = true;
-    //r.latencyOverLimitPercent = ((latencyDram - dramLatencyLimit) * 100) / dramLatencyLimit;
-    r.latencyOverLimitPercent = latencyDram;
-  }
+
+  //r.l1Bandwidth = checkBandwidth("L1",symbolId,allocation);
+  //r.l2Bandwidth = checkBandwidth("L2",symbolId,allocation);
+  //r.l3Bandwidth = checkBandwidth("L3",symbolId,allocation);
+  //r.remoteCacheBandwidth = checkBandwidth("Remote Cache (1 hops)",symbolId,allocation);
+  r.dramBandwidth = checkBandwidth("Local DRAM",symbolId,allocation);
+  r.remoteDramBandwidth = checkBandwidth("Remote DRAM (1 hop)",symbolId,allocation);
 
   // check for cache
+  /*
   auto l1HitRate = getL1HitRate(symbolId,allocation);
   auto l2HitRate = getL2HitRate(symbolId,allocation);
   auto l3HitRate = getL3HitRate(symbolId,allocation);
@@ -241,23 +264,234 @@ AutoAnalysis::Result AutoAnalysis::analyzeFunctionAndObject(const int symbolId, 
   auto latencyMargin = 1.2;
   auto l3Latency = 70;
   auto l3DefaultLatency = 70; //default for broadwell
+  */
 
 
+  r.memoryStallCycles = getMemoryStallCycles(symbolId);
+/*
   if(l1HitRate < cacheHitRateLimit && (l1HitRate + l2HitRate + cacheHitRateMargin) >= 100 && l2Latency < l2DefaultLatency * latencyMargin)
   {
     //L1 limit
     r.workingSetL1 = true;
     r.l1HitRate = l1HitRate;
   }
+
+  r.l1LatencySavings = getL2HitCount(symbolId,allocation) * samplerate * (getL2Latency(symbolId, allocation) - getL1Latency(symbolId, allocation));
+
+
   if(l2HitRate < cacheHitRateLimit && (l3HitRate + l2HitRate + cacheHitRateMargin) >= 100 && l3Latency < l3DefaultLatency * latencyMargin)
   {
     //L2 limit
     r.workingSetL2 = true;
     r.l2HitRate = l2HitRate;
   }
+  r.l2LatencySavings = getL3HitCount(symbolId,allocation) * samplerate * (getL3Latency(symbolId, allocation) - getL2Latency(symbolId, allocation));
+  */
+
+  //auto totalLatency = getTotalLatency(symbolId);
+  //auto memStallCycles = getMemStallCycles(symbolId);
 
   // add calls to other analyis functions
   return r;
+}
+
+BandwidthResult AutoAnalysis::checkBandwidth(const QString& memory, const int symbolId, const int allocationId) const
+{
+  BandwidthResult r;
+  r.memory = memory;
+  auto sampleCount = getSampleCountInMemory(symbolId,allocationId,memory);
+  auto latency = getLatencyInMemory(symbolId,allocationId,memory);
+  if(latency > getLatencyLimit(memory) )
+  {
+    r.problem = true;
+    r.latency = latency;
+    if(sampleCount <= sampleCountLimit)
+    {
+      r.lowSampleCount = true;
+    }
+  }
+  r.latencySavings = getSamplerate() * sampleCount * (latency - getLatencyLimit(memory));
+  return r;
+}
+
+float AutoAnalysis::getLatencyLimit(const QString& memory) const
+{
+ return latencyLimit[memory];
+}
+
+unsigned int AutoAnalysis::getSampleCountInMemory(const int symbolId, const int allocationId, const QString& memory) const
+{
+  QSqlQuery q("select count(*) from samples inner join allocations on samples.allocation_id = allocations.id\
+   where evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") and \
+   symbol_id = ?" % allocationLimitString(allocationId) % " and \
+   memory_level = (select id from memory_levels where name = ?)");
+  q.bindValue(0,symbolId);
+  q.bindValue(1,memory);
+  return executeSingleUnsignedIntQuery(q);
+}
+
+float AutoAnalysis::getLatencyInMemory(const int symbolId, const int allocationId, const QString& memory) const
+{
+  QSqlQuery q("select avg(weight) from samples inner join allocations on samples.allocation_id = allocations.id where symbol_id = ? and \
+  evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") and \
+  memory_level = (select id from memory_levels where name like ?)" + allocationLimitString(allocationId));
+  q.bindValue(0,symbolId);
+  q.bindValue(1,memory);
+  return executeSingleFloatQuery(q);
+}
+
+unsigned int AutoAnalysis::getSamplerate() const
+{
+  QSqlQuery q("select samplerate from metadata");
+  return executeSingleUnsignedIntQuery(q);
+}
+
+QStringList AutoAnalysis::getHitmMemoryLevels(const int symbolId, const int allocationId) const
+{
+  QSqlQuery q("select distinct(memory_level) from samples inner join allocations on samples.allocation_id = allocations.id \
+  where memory_snoop = (select id from memory_snoop where name = \"Snoop Hit Modified\") and \
+  symbol_id = ?" + allocationLimitString(allocationId));
+  q.bindValue(0,symbolId);
+  q.exec();
+  QStringList mems;
+  while(q.next())
+  {
+    mems.append(q.value(0).toString());
+  }
+  return mems;
+}
+
+float AutoAnalysis::getL1Latency(const int symbolId, const int allocationId) const
+{
+  QSqlQuery q("select avg(weight) from samples inner join allocations on samples.allocation_id = allocations.id where symbol_id = ? and \
+  evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") and \
+  memory_level = (select id from memory_levels where name like \"%L1%\")" + allocationLimitString(allocationId));
+  q.bindValue(0,symbolId);
+  return executeSingleFloatQuery(q);
+}
+
+bool AutoAnalysis::isObjectWrittenByMultipleThreads(const int allocationId) const
+{
+  QSqlQuery q("select count(distinct samples.thread_id)from samples inner join allocations on samples.allocation_id = allocations.id where memory_opcode = \
+  (select id from memory_opcodes where name = \"Store\")" + allocationLimitString(allocationId));
+  auto threads = executeSingleUnsignedIntQuery(q);
+  if(threads > 1)
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+bool AutoAnalysis::areAddressesInObjectShared(const int allocationId) const
+{
+  QSqlQuery q("select count(distinct samples.thread_id) as numThreads from samples where \
+  memory_opcode = (select id from memory_opcodes where name = \"Store\") \
+  and allocation_id in (select id from allocations where call_path_id = ? ) \
+  and to_ip in \
+  (select distinct to_ip from samples inner join allocations on samples.allocation_id = allocations.id where \
+  memory_snoop = (select id from memory_snoop where name = \"Snoop Hit Modified\") and allocations.call_path_id = ?) \
+  group by allocation_id,to_Ip \
+  having count(to_ip) > 1"); //to include only addresses which have 2 or more accesses to an address
+  q.bindValue(0,allocationId);
+  q.bindValue(1,allocationId);
+  q.exec();
+  unsigned int oneThread = 0;
+  unsigned int moreThreads = 0;
+  while (q.next())
+  {
+    auto value = q.value(0).toUInt();
+    if(value == 1)
+    {
+      oneThread++;
+    }
+    else
+    {
+      moreThreads++;
+    }
+  }
+  if((float)oneThread / (float)(oneThread + moreThreads) > 0.5)
+  {
+    return false;
+  }
+  else
+  {
+    return true;
+  }
+}
+
+float AutoAnalysis::getL2Latency(const int symbolId, const int allocationId) const
+{
+  QSqlQuery q("select avg(weight) from samples inner join allocations on samples.allocation_id = allocations.id where symbol_id = ? and \
+  evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") and \
+  memory_level = (select id from memory_levels where name like \"%L2%\")" + allocationLimitString(allocationId));
+  q.bindValue(0,symbolId);
+  return executeSingleFloatQuery(q);
+}
+
+float AutoAnalysis::getL3Latency(const int symbolId, const int allocationId) const
+{
+  QSqlQuery q("select avg(weight) from samples inner join allocations on samples.allocation_id = allocations.id where symbol_id = ? and \
+  evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") and \
+  memory_level = (select id from memory_levels where name like \"%L3%\")" + allocationLimitString(allocationId));
+  q.bindValue(0,symbolId);
+  return executeSingleFloatQuery(q);
+}
+
+unsigned int AutoAnalysis::getL2HitCount(const int symbolId, const int allocationId) const
+{
+  QSqlQuery q("select count(*)from samples inner join allocations on samples.allocation_id = allocations.id where symbol_id = ? and \
+  evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") and \
+  memory_level = (select id from memory_levels where name like \"%L2%\") \
+  and to_ip/64 in (select to_ip/64 from samples inner join allocations on samples.allocation_id = allocations.id where symbol_id = symbol_id and memory_level = (select id from memory_levels where name like \"%L1%\") \
+  "+ allocationLimitString(allocationId) + ") \
+  " + allocationLimitString(allocationId));
+  q.bindValue(0,symbolId);
+  return executeSingleUnsignedIntQuery(q);
+}
+
+unsigned int AutoAnalysis::getL3HitCount(const int symbolId, const int allocationId) const
+{
+  QSqlQuery q("select count(*) from samples inner join allocations on samples.allocation_id = allocations.id where symbol_id = ? and \
+  evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") and \
+  memory_level = (select id from memory_levels where name like \"%L3%\")  and to_ip/64 in (select to_ip/64 from samples inner join allocations on samples.allocation_id = allocations.id where symbol_id = symbol_id and memory_level = (select id from memory_levels where name like \"%L2%\") \
+  "+ allocationLimitString(allocationId) + ") " + allocationLimitString(allocationId));
+  q.bindValue(0,symbolId);
+  return executeSingleUnsignedIntQuery(q);
+}
+
+unsigned int AutoAnalysis::getDramHitCount(const int symbolId, const int allocationId) const
+{
+  QSqlQuery q("select count(*) from samples inner join allocations on samples.allocation_id = allocations.id\
+  where evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") and \
+  symbol_id = ?" % allocationLimitString(allocationId) % " and \
+  memory_level = (select id from memory_levels where name = \"Local DRAM\") ");
+  q.bindValue(0,symbolId);
+  return executeSingleUnsignedIntQuery(q);
+}
+
+
+float AutoAnalysis::getNonHimLatency(const int symbolId, const int allocationId, const QStringList &memories) const
+{
+  QStringList s(memories);
+  auto str = s.join(",");
+  QSqlQuery q("select avg(weight) from samples inner join allocations on samples.allocation_id = allocations.id where symbol_id = ? and memory_snoop != \
+  (select id from memory_snoop where name = \"Snoop Hit Modified\") and evsel_id = \
+  (select id from selected_events where name like \"cpu/mem-loads%\") and memory_level in ("+str+")" + allocationLimitString(allocationId));
+  q.bindValue(0,symbolId);
+  return executeSingleFloatQuery(q);
+}
+
+float AutoAnalysis::getHimLatency(const int symbolId, const int allocationId) const
+{
+  QSqlQuery q("select avg(weight) from samples inner join allocations on samples.allocation_id = allocations.id\
+  where symbol_id = ? and memory_snoop = \
+  (select id from memory_snoop where name = \"Snoop Hit Modified\") and evsel_id = \
+  (select id from selected_events where name like \"cpu/mem-loads%\")" + allocationLimitString(allocationId));
+  q.bindValue(0,symbolId);
+  return executeSingleFloatQuery(q);
 }
 
 unsigned int AutoAnalysis::getDramSampleCount(const int symbolId, const int allocationId) const
@@ -319,12 +553,18 @@ void AutoAnalysis::loadSettings(const QString &path)
 {
   QSettings settings(path,QSettings::IniFormat);
   settings.beginGroup("AutoAnalysis");
-  hitmLimit = settings.value("hitmLimit",2).toUInt();
+  hitmLimit = settings.value("hitmLimit",1).toUInt();
   lfbLatencyLimit = settings.value("lfbLatencyLimit",290).toUInt();
   dramLatencyLimit = settings.value("dramLatencyLimit",466).toUInt();
   cacheHitRateLimit = settings.value("cacheHitRateLimit",80).toFloat();
   cacheHitRateMargin = settings.value("cacheHitRateMargin",10).toFloat();
-  dramSampleCountLimit = settings.value("dramSampleCountLimit",10).toUInt();
+  sampleCountLimit = settings.value("sampleCountLimit",10).toUInt();
+  latencyLimit["L1"] = settings.value("l1LatencyLimit",0).toUInt();
+  latencyLimit["L2"] = settings.value("l2LatencyLimit",0).toUInt();
+  latencyLimit["L3"] = settings.value("l3LatencyLimit",0).toUInt();
+  latencyLimit["Local DRAM"] = settings.value("dramLatencyLimit",0).toUInt();
+  latencyLimit["Remote DRAM (1 hop)"] = settings.value("remoteDramLatencyLimit",0).toUInt();
+  latencyLimit["Remote Cache (1 hops)"] = settings.value("remoteCacheLatencyLimit",0).toUInt();
   settings.endGroup();
 }
 
@@ -332,21 +572,25 @@ void AutoAnalysis::saveSettings(const QString &path)
 {
   QSettings settings(path,QSettings::IniFormat);
   settings.beginGroup("AutoAnalysis");
-  settings.setValue("hitmLmit",hitmLimit);
+  settings.setValue("hitmLimit",hitmLimit);
   settings.setValue("lfbLatencyLimit",lfbLatencyLimit);
   settings.setValue("dramLatencyLimit",dramLatencyLimit);
   settings.setValue("cacheHitRateLimit",(unsigned int) cacheHitRateLimit);
   settings.setValue("cacheHitRateMargin",(unsigned int) cacheHitRateMargin);
-  settings.setValue("dramSampleCountLimit",(unsigned int) dramSampleCountLimit);
+  settings.setValue("sampleCountLimit",(unsigned int) sampleCountLimit);
+  settings.setValue("l1LatencyLimit",(unsigned int) latencyLimit["L1"]);
+  settings.setValue("l2LatencyLimit",(unsigned int) latencyLimit["L2"]);
+  settings.setValue("l3LatencyLimit",(unsigned int) latencyLimit["L3"]);
+  settings.setValue("dramLatencyLimit",(unsigned int) latencyLimit["Local DRAM"]);
+  settings.setValue("remoteDramLatencyLimit",(unsigned int) latencyLimit["Remote DRAM (1 hop)"]);
+  settings.setValue("remoteCacheLatencyLimit",(unsigned int) latencyLimit["Remote Cache (1 hops)"]);
   settings.endGroup();
   settings.sync();
 }
 
 unsigned int AutoAnalysis::getNumberOfHitmInFunction(const int symbolId, const int allocationId) const
 {
-  QSqlQuery q("select symbol_id, \
-  count (*) as \"HITM count\", \
-  avg(weight) as \"HITM average latency\" \
+  QSqlQuery q("select count (*) as \"HITM count\" \
   from samples inner join allocations on samples.allocation_id = allocations.id\
   where symbol_id = ? \
   and memory_snoop = (select id from memory_snoop where name = \"Snoop Hit Modified\") \
@@ -397,3 +641,10 @@ QString AutoAnalysis::allocationLimitString(const int allocationId) const
  }
 }
 
+float AutoAnalysis::getMemoryStallCycles(const int symbolId) const
+{
+  QSqlQuery q("select sum(period) from samples where symbol_id = ? and evsel_id =\
+  (select id from selected_events where name = \"cycle_activity_stalls_mem_any\")");
+  q.bindValue(0,symbolId);
+  return executeSingleFloatQuery(q);
+}

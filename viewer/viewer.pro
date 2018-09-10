@@ -4,10 +4,10 @@
 #
 #-------------------------------------------------
 
-QT       += sql core gui
+QT       += sql core gui concurrent
 QT       += charts
 
-greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
+greaterThan(QT_MAJOR_VERSION, 5): QT += widgets
 
 TARGET = viewer
 TEMPLATE = app
@@ -41,7 +41,9 @@ SOURCES += \
     guiutils.cpp \
     timelineaxiswidget.cpp \
     abstracttimelinewidget.cpp \
-    autoanalysis.cpp
+    autoanalysis.cpp \
+    treeitem.cpp \
+    treemodel.cpp
 
 HEADERS += \
         analysismain.h \
@@ -59,7 +61,9 @@ HEADERS += \
     guiutils.h \
     timelineaxiswidget.h \
     abstracttimelinewidget.h \
-    autoanalysis.h
+    autoanalysis.h \
+    treeitem.h \
+    treemodel.h
 
 FORMS += \
         analysismain.ui \

@@ -39,7 +39,7 @@
        <bool>true</bool>
       </property>
       <property name="currentIndex">
-       <number>2</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="functionsTab">
        <attribute name="title">
@@ -65,6 +65,7 @@
             <bool>true</bool>
            </property>
           </widget>
+          <widget class="QTreeView" name="callerTreeView"/>
          </widget>
         </item>
         <item>
@@ -206,10 +207,10 @@
             </size>
            </property>
            <property name="verticalScrollBarPolicy">
-            <enum>Qt::ScrollBarAlwaysOff</enum>
+            <enum>Qt::ScrollBarAsNeeded</enum>
            </property>
            <property name="horizontalScrollBarPolicy">
-            <enum>Qt::ScrollBarAlwaysOn</enum>
+            <enum>Qt::ScrollBarAsNeeded</enum>
            </property>
            <property name="sizeAdjustPolicy">
             <enum>QAbstractScrollArea::AdjustToContents</enum>
@@ -233,7 +234,7 @@
             <number>3</number>
            </property>
            <attribute name="headerStretchLastSection">
-            <bool>true</bool>
+            <bool>false</bool>
            </attribute>
            <column>
             <property name="text">
