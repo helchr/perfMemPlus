@@ -12,4 +12,8 @@ int GuiUtils::getColumnCount(QTreeWidget* tv)
   return tv->columnCount();
 }
 
+int GuiUtils::getColumnCount(QTreeView* tv)
+{
+  return tv->model()->columnCount();
+}
 
