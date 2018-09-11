@@ -37,7 +37,7 @@ cycleSampleRate=$(($sampleRate*1000))
 #actual perf execution
 rm /tmp/*.allocationData
 export ALLOCATION_MIN_SIZE=$allocationMinSize
-LD_PRELOAD=`dirname $0`/../allocationTracker/ldlib.so $perf record -d -W -e cpu/mem-loads,ldlat=1,period=$sampleRate/P,cpu/mem-stores,period=$sampleRate/P,cpu/cpu-cycles,period=$cycleSampleRate/P,cpu/instructions,period=$cycleSampleRate/P,cpu/event=0xc2,umask=0x1,inv=0x1,name=StallCycles,period=$cycleSampleRate/P -g -k CLOCK_MONOTONIC -o /tmp/perf.data -- "$@"
+LD_PRELOAD=`dirname $0`/../allocationTracker/ldlib.so $perf record -d -W -e cpu/mem-loads,ldlat=1,period=$sampleRate/P,cpu/mem-stores,period=$sampleRate/P,cpu/cpu-cycles,period=$cycleSampleRate/P,cpu/instructions,period=$cycleSampleRate/P -g -k CLOCK_MONOTONIC -o /tmp/perf.data -- "$@"
 $perf script -i /tmp/perf.data -s `dirname $0`/../perfSqliteExport/exportToSqlite.py /tmp/perf.db -c
 cmdline="$@"
 `dirname $0`/../prepareDatabase/prepareDatabase /tmp/perf.db -c $sampleRate -a $allocationMinSize -l "$cmdline"
