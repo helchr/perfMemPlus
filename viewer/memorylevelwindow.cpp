@@ -14,7 +14,7 @@ ui(new Ui::MemoryLevelWindow)
 
   selectAll.prepare("select (select name from memory_levels where id = memory_level) as lvl, count (*) as \"count\", \
   avg(weight) as \"average latency\", \
-  count(*) * 100 / (select count(*) from samples where evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") ) as \"hit rate %\" \
+  count(*) * 100.0 / (select count(*) from samples where evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") ) as \"hit rate %\" \
   from samples \
   where evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") \
   group by lvl order by count desc");
@@ -47,7 +47,7 @@ ui(new Ui::MemoryLevelWindow)
     auto sqlItems = SqlUtils::makeSqlStringFunctions(items);
     model->setQuery("select (select name from memory_levels where id = memory_level) as lvl, count (*) as \"count\", \
     avg(weight) as \"average latency\", \
-    count(*) * 100 / (select count(*) from samples where evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") \
+    count(*) * 100.0 / (select count(*) from samples where evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") \
     and symbol_id in (select id from symbols where name = " + sqlItems + " ) )as \"hit rate %\" \
     from samples \
     where evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") \
@@ -64,7 +64,7 @@ ui(new Ui::MemoryLevelWindow)
     auto inclNull = SqlUtils::makeIncludeNullStatement(items);
     model->setQuery("select (select name from memory_levels where id = memory_level) as lvl, count (*) as \"count\", \
     avg(weight) as \"average latency\", \
-    count(*) * 100 / (select count(*) from samples where (allocation_id in (" + sqlItems + ") " + inclNull + ") and \
+    count(*) * 100.0 / (select count(*) from samples where (allocation_id in (" + sqlItems + ") " + inclNull + ") and \
     evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") ) as \"hit rate %\" from samples \
     where evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") \
     and (allocation_id in (" + sqlItems + ") " + inclNull + ") group by lvl order by memory_level asc");
@@ -109,7 +109,7 @@ ui(new Ui::MemoryLevelWindow)
 
   model->setQuery("select (select name from memory_levels where id = memory_level) as lvl, count (*) as \"count\", \
   avg(weight) as \"average latency\", \
-  count(*) * 100 / (select count(*) from samples where evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") \
+  count(*) * 100.0 / (select count(*) from samples where evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") \
   and symbol_id in (select id from symbols where name = " + sqlFunctionItems + " ) and \
   (allocation_id in (" + sqlObjectItems + ") " + inclNull + ") )as \"hit rate %\" \
   from samples \
@@ -144,7 +144,7 @@ MemoryLevelWindow::~MemoryLevelWindow()
 void MemoryLevelWindow::printRemoteMemoryAccessFunctions(const QStringList& items)
 {
   auto sqlItems = SqlUtils::makeSqlStringFunctions(items);
-  auto result = executeSingleResultQuery("select 100 * numRemote / (numLocal + numRemote) as remote from ( \
+  auto result = executeSingleResultQuery("select 100.0 * numRemote / (numLocal + numRemote) as remote from ( \
   select ( \
   select count(*) from samples where evsel_id = (select id from selected_events where name like \"%load%\")  and \
   memory_level = (select id from memory_levels where name like \"Local DRAM%\") and \
@@ -155,13 +155,13 @@ void MemoryLevelWindow::printRemoteMemoryAccessFunctions(const QStringList& item
   memory_level = (select id from memory_levels where name like \"Remote DRAM%\") and \
   symbol_id in (select id from symbols where name = " + sqlItems + " \
   ) ) as numRemote )");
-  ui->remoteAccessNumberLabel->setText(result.toString() + "%");
+  ui->remoteAccessNumberLabel->setText(QString::number(result.toDouble(),'f',2) + "%");
 }
 
 void MemoryLevelWindow::printRemoteMemoryAccessFunctionsInclCache(const QStringList& items)
 {
   auto sqlItems = SqlUtils::makeSqlStringFunctions(items);
-  auto result = executeSingleResultQuery("select 100 * numRemote / (numLocal + numRemote) as remote from ( \
+  auto result = executeSingleResultQuery("select 100.0 * numRemote / (numLocal + numRemote) as remote from ( \
   select ( \
   select count(*) from samples where evsel_id = (select id from selected_events where name like \"%load%\")  and \
   memory_level in (select id from memory_levels where name like \"Local DRAM%\" or name like \"L3\") and \
@@ -172,14 +172,14 @@ void MemoryLevelWindow::printRemoteMemoryAccessFunctionsInclCache(const QStringL
   memory_level in (select id from memory_levels where name like \"Remote DRAM%\" or name like \"Remote Cache%\") and \
   symbol_id in (select id from symbols where name = " + sqlItems + " \
   ) ) as numRemote )");
-  ui->remoteAccessInclCacheNumberLabel->setText(result.toString() + "%");
+  ui->remoteAccessInclCacheNumberLabel->setText(QString::number(result.toDouble(),'f',2) + "%");
 }
 
 void MemoryLevelWindow::printRemoteMemoryAccessObjects(QStringList items)
 {
   auto sqlItems = SqlUtils::makeSqlStringObjects(items);
   auto inclNull = SqlUtils::makeIncludeNullStatement(items);
-  auto result = executeSingleResultQuery("select 100 * numRemote / (numLocal + numRemote) as remote from ( \
+  auto result = executeSingleResultQuery("select 100.0 * numRemote / (numLocal + numRemote) as remote from ( \
   select ( \
   select count(*) from samples where evsel_id = (select id from selected_events where name like \"%load%\")  and \
   memory_level = (select id from memory_levels where name like \"Local DRAM%\") and \
@@ -191,7 +191,7 @@ void MemoryLevelWindow::printRemoteMemoryAccessObjects(QStringList items)
   (allocation_id in (" + sqlItems + ") " + inclNull + ") \
   ) as numRemote \
   )");
-  ui->remoteAccessNumberLabel->setText(result.toString() + "%");
+  ui->remoteAccessNumberLabel->setText(QString::number(result.toDouble(),'f',2) + "%");
 }
 
 
@@ -199,7 +199,7 @@ void MemoryLevelWindow::printRemoteMemoryAccessObjectsInclCache(QStringList item
 {
   auto sqlItems = SqlUtils::makeSqlStringObjects(items);
   auto inclNull = SqlUtils::makeIncludeNullStatement(items);
-  auto result = executeSingleResultQuery("select 100 * numRemote / (numLocal + numRemote) as remote from ( \
+  auto result = executeSingleResultQuery("select 100.0 * numRemote / (numLocal + numRemote) as remote from ( \
   select ( \
   select count(*) from samples where evsel_id = (select id from selected_events where name like \"%load%\")  and \
   memory_level in (select id from memory_levels where name like \"Local DRAM%\" or name like \"L3\") and \
@@ -211,7 +211,7 @@ void MemoryLevelWindow::printRemoteMemoryAccessObjectsInclCache(QStringList item
   (allocation_id in (" + sqlItems + ") " + inclNull + ") \
   ) as numRemote \
   )");
-  ui->remoteAccessInclCacheNumberLabel->setText(result.toString() + "%");
+  ui->remoteAccessInclCacheNumberLabel->setText(QString::number(result.toDouble(),'f',2) + "%");
 }
 
 void MemoryLevelWindow::printRemoteMemoryAccessFunctionsObjects(const QStringList& functionItems, QStringList objectItems)
@@ -219,7 +219,7 @@ void MemoryLevelWindow::printRemoteMemoryAccessFunctionsObjects(const QStringLis
   auto sqlObjectItems = SqlUtils::makeSqlStringObjects(objectItems);
   auto inclNull = SqlUtils::makeIncludeNullStatement(objectItems);
   auto sqlFunctionItems = SqlUtils::makeSqlStringFunctions(functionItems);
-  auto result = executeSingleResultQuery("select 100 * numRemote / (numLocal + numRemote) as remote from ( \
+  auto result = executeSingleResultQuery("select 100.0 * numRemote / (numLocal + numRemote) as remote from ( \
   select ( \
   select count(*) from samples where evsel_id = (select id from selected_events where name like \"%load%\")  and \
   memory_level = (select id from memory_levels where name like \"Local DRAM%\") and \
@@ -233,7 +233,7 @@ void MemoryLevelWindow::printRemoteMemoryAccessFunctionsObjects(const QStringLis
   symbol_id in (select id from symbols where name = " + sqlFunctionItems + ") \
   ) as numRemote \
   )");
-  ui->remoteAccessNumberLabel->setText(result.toString() + "%");
+  ui->remoteAccessNumberLabel->setText(QString::number(result.toDouble(),'f',2) + "%");
 }
 
 void MemoryLevelWindow::printRemoteMemoryAccessFunctionsObjectsInclCache(const QStringList& functionItems, QStringList objectItems)
@@ -241,7 +241,7 @@ void MemoryLevelWindow::printRemoteMemoryAccessFunctionsObjectsInclCache(const Q
   auto sqlObjectItems = SqlUtils::makeSqlStringObjects(objectItems);
   auto inclNull = SqlUtils::makeIncludeNullStatement(objectItems);
   auto sqlFunctionItems = SqlUtils::makeSqlStringFunctions(functionItems);
-  auto result = executeSingleResultQuery("select 100 * numRemote / (numLocal + numRemote) as remote from ( \
+  auto result = executeSingleResultQuery("select 100.0 * numRemote / (numLocal + numRemote) as remote from ( \
   select ( \
   select count(*) from samples where evsel_id = (select id from selected_events where name like \"%load%\")  and \
   memory_level = (select id from memory_levels where name like \"Local DRAM%\" or name like \"L3%\") and \
@@ -255,7 +255,7 @@ void MemoryLevelWindow::printRemoteMemoryAccessFunctionsObjectsInclCache(const Q
   symbol_id in (select id from symbols where name = " + sqlFunctionItems + ") \
   ) as numRemote \
   )");
-  ui->remoteAccessInclCacheNumberLabel->setText(result.toString() + "%");
+  ui->remoteAccessInclCacheNumberLabel->setText(QString::number(result.toDouble(),'f',2) + "%");
 }
 
 QVariant MemoryLevelWindow::executeSingleResultQuery(const QString& query) const
