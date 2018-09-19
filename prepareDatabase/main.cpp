@@ -644,6 +644,15 @@ void modifySamplesTable()
   }
 }
 
+std::string getTime()
+{
+  time_t t = time(0);
+  char* tStr = asctime(localtime(&t));
+  tStr[strlen(tStr) -1] = '\0';
+  return tStr;
+}
+
+
 void updateRelationshipKeys(QSqlDatabase& db)
 {
   db.exec("CREATE INDEX IF NOT EXISTS idx_allocations_id on allocations(id)");
@@ -672,14 +681,22 @@ void updateRelationshipKeys(QSqlDatabase& db)
   {
     throw std::runtime_error("Event id not found");
   }
-  prepare(updateSample,"update samples set allocation_id = ? where to_ip between ? and ? and time between ? and ? \
-  and (evsel_id = ? or evsel_id = ?)");
-  db.exec("CREATE INDEX IF NOT EXISTS idx_to_ip_time ON samples(to_ip,time,evsel_id)");
-  db.exec("BEGIN TRANSACTION");
+  prepare(updateSample,"update samples set allocation_id = ? where id = ?");
+  QSqlQuery createTmpTable;
+  prepare(createTmpTable,"create table samplesMem as select id, time, to_ip from samples where evsel_id in (?,?)");
+  createTmpTable.bindValue(0,id1);
+  createTmpTable.bindValue(1,id2);
+  createTmpTable.exec();
+  db.exec("create index idx_samplesMem_toIp on samplesMem(to_ip,time,id)"); // covering index, id must be last parameter
+  QSqlQuery findUpdates;
+  prepare(findUpdates,"select id from samplesMem where to_ip between ? and ? and time between ? and ?");
   getIds.exec();
+  QVariantList allocIds;
+  QVariantList sampleIds;
+  //std::cout << getTime() << " Start query part" << std::endl;
   while(getIds.next())
   {
-    const int id = getIds.value(0).toLongLong();
+    auto id = getIds.value(0).toLongLong();
     getAllocationData.bindValue(0,id);
     getAllocationData.exec();
     if(getAllocationData.next())
@@ -688,15 +705,17 @@ void updateRelationshipKeys(QSqlDatabase& db)
       long long addressEnd = getAllocationData.value(1).toLongLong();
       long long timeStart = getAllocationData.value(2).toLongLong();
       long long timeEnd = getAllocationData.value(3).toLongLong();
-      updateSample.bindValue(0, id);
-      updateSample.bindValue(1, addressStart);
-      updateSample.bindValue(2, addressEnd);
-      updateSample.bindValue(3, timeStart);
-      updateSample.bindValue(4, timeEnd);
-      updateSample.bindValue(5, id1);
-      updateSample.bindValue(6, id2);
-      updateSample.exec();
-      updateSample.finish();
+
+      findUpdates.bindValue(0, addressStart);
+      findUpdates.bindValue(1, addressEnd);
+      findUpdates.bindValue(2, timeStart);
+      findUpdates.bindValue(3, timeEnd);
+      findUpdates.exec();
+      while(findUpdates.next())
+      {
+          allocIds << id;
+          sampleIds << findUpdates.value(0);
+      }
     }
     if(getAllocationData.next())
     {
@@ -704,7 +723,14 @@ void updateRelationshipKeys(QSqlDatabase& db)
     }
     getAllocationData.finish();
   }
+
+  //std::cout << getTime() << " Start update part" << std::endl;
+  db.exec("BEGIN TRANSACTION");
+  updateSample.addBindValue(allocIds);
+  updateSample.addBindValue(sampleIds);
+  updateSample.execBatch();
   db.exec("END TRANSACTION");
+  db.exec("drop table samplesMem");
   getIds.finish();
   updateSample.finish();
 }
@@ -817,14 +843,6 @@ void fillMetadataTable(QSqlDatabase& db, const QString& cmdline, const int sampl
   q.bindValue(1,samplerate);
   q.bindValue(2,minAllocationSize);
   q.exec();
-}
-
-std::string getTime()
-{
-  time_t t = time(0);
-  char* tStr = asctime(localtime(&t));
-  tStr[strlen(tStr) -1] = '\0';
-  return tStr;
 }
 
 int main(int argc, char *argv[])
