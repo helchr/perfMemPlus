@@ -737,7 +737,7 @@ void updateRelationshipKeys(QSqlDatabase& db)
 
 void createViews(QSqlDatabase& db)
 {
-  const QString minSamplesStr = "5";
+  const QString minSamplesStr = "1";
 
   db.exec(QString("CREATE VIEW `snoop of samples` AS \
   select (select name from memory_snoop where id = memory_snoop) as `snoop`, \
@@ -784,17 +784,17 @@ void createViews(QSqlDatabase& db)
   from samples where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%') \
   group by allocation_id,function having count(*) >= " % minSamplesStr % " order by count desc"));
 
-  db.exec(QString("CREATE VIEW `latency of functions` AS select \
+  db.exec(QString("CREATE VIEW `latency of functions` AS select symbol_id, \
   (select name from symbols where id = symbol_id) as function, \
   cast ( printf('%.2f',avg(weight)) as float) as `latency`, \
   count(*) as `count`, \
   cast ( printf('%.2f',sum(weight)  *100 / (select cast( sum(weight)  as float) from samples where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%'))) as float)  as `latency %`, \
   cast ( printf('%.2f',avg(weight) / (select cast(avg(weight) as float) from samples where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%') )) as float) as `latency factor` \
   from samples where evsel_id = (select id from selected_events where name like 'cpu/mem-loads%')  \
-  group by function having count(*) >= " % minSamplesStr % " order by count desc"));
+  group by symbol_id having count(*) >= " % minSamplesStr % " order by count desc"));
 
   db.exec(QString("CREATE VIEW `function profile` AS \
-  select (select name from symbols where id = symbol_id) as `function`, \
+  select symbol_id, (select name from symbols where id = symbol_id) as `function`, \
   cast ( printf('%.2f',sum(period) * 100 / (select cast(sum(period) as float) from samples where evsel_id = \
   (select id from selected_events where name like 'cpu/cpu-cycles%'))) as float) as `execution time %` \
   from samples where evsel_id = \
@@ -802,23 +802,23 @@ void createViews(QSqlDatabase& db)
   group by symbol_id having count(*) >= " % minSamplesStr % " order by `execution time %` desc"));
 
   db.exec(QString("CREATE VIEW `IPC of functions` AS \
-  select function, \
+  select a.symbol_id, (select name from symbols where id = a.symbol_id) as 'function', \
   cast ( printf('%.2f',instructions/cast(cycles as float)) as float) as `IPC` from \
-  (select (select name from symbols where id = symbol_id) as `function`, \
+  (select symbol_id, \
   sum(period) as cycles from samples where evsel_id = \
   (select id from selected_events where name like 'cpu/cpu-cycles%') \
-  group by symbol_id having count(*) >= " % minSamplesStr % ") \
+  group by symbol_id having count(*) >= " % minSamplesStr % ") a \
   inner join \
-  (select (select name from symbols where id = symbol_id) as `function`, \
+  (select symbol_id, \
   sum(period) as instructions from samples where evsel_id = \
   (select id from selected_events where name like 'cpu/instructions%') \
-  group by symbol_id having count(*) >= " % minSamplesStr % ") using (function) \
-  where function != 'unknown' \
+  group by symbol_id having count(*) >= " % minSamplesStr % ") b \
+  on a.symbol_id = b.symbol_id \
   order by IPC asc"));
 
   db.exec(QString("create view 'functions all' as \
-  select `function`, `execution time %`, `IPC`,`latency`,`latency %`,`latency factor` from \
-  'IPC of functions' inner join 'function profile' using ('function') inner join 'latency of functions' using ('function') \
+  select (select name from symbols where id = a.symbol_id) as `function`, `execution time %`, `IPC`,`latency`,`latency %`,`latency factor` from \
+  'IPC of functions' a inner join 'function profile' b using (symbol_id) inner join 'latency of functions' c using (symbol_id) \
   order by 'execution time %' desc"));
 
   db.exec((QString("create view 'samples load' as \
