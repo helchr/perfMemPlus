@@ -1,7 +1,13 @@
 #!/bin/bash
 
 #install dependencies for qt based applications
-apt-get install g++ make qtbase5-dev qt5-default libqt5charts5-dev
+apt-get install g++ make qtbase5-dev qt5-default
+
+apt-get install libqt5charts5-dev
+# libqt5charts5-dev is not available as a package on Ubuntu 16.04
+# qt needs to be manually installed in this case
+# libqt5charts5-dev is only required for the viewer
+# Other components will work without this library
 
 #build perfMemPlus components
 cd allocationTracker
