@@ -23,7 +23,7 @@ make
 cd ..
 
 #install dependencies for building perf with required modules
-apt-get install flex bison libelf-dev libiberty-dev libnuma-dev libunwind-dev elfutils libibery-dev libdw-dev python-dev binutils-dev libbfd-dev linux-tools-$(uname -r)
+apt-get install flex bison libelf-dev libiberty-dev libnuma-dev libunwind-dev elfutils libdw-dev python-dev binutils-dev libbfd-dev linux-tools-$(uname -r)
 
 #build perf
 if [[ $(uname -r) ==	*"4.4.0"* ]];
