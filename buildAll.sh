@@ -20,7 +20,13 @@ cd ..
 apt-get install flex bison libelf-dev libnuma-dev libunwind-dev elfutils libdw-dev python-dev binutils-dev libbfd-dev linux-tools-$(uname -r)
 
 #build perf
-apt-get install linux-source
+if [[ $(uname -r) ==	*"4.4.0"* ]];
+then
+  apt-get install linux-source-4.8
+else
+  apt-get install linux-source
+fi
+
 tar jxf /usr/src/linux-source*.tar.bz2
 cd linux-source-*/tools/perf
 make
