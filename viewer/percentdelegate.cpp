@@ -1,6 +1,7 @@
 #include "percentdelegate.h"
 #include <QPainter>
 #include <QApplication>
+#include <cmath>
 
 PercentDelegate::PercentDelegate(QObject *parent) : QStyledItemDelegate(parent)
 {

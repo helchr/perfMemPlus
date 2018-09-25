@@ -1,6 +1,7 @@
 #include "abstracttimelinewidget.h"
 #include <QPainter>
 #include <QPaintEvent>
+#include <cmath>
 
 AbstractTimelineWidget::AbstractTimelineWidget(QWidget *parent) : QWidget(parent)
 {
