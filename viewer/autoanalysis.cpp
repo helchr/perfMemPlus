@@ -24,6 +24,7 @@ void AutoAnalysis::createIndexes() const
   q.exec("create index if not exists idx_samples_evsel_id on samples(evsel_id)");
   q.exec("create index if not exists idx_samples_evsel_id on samples(memory_level)");
   q.exec("create index if not exists idx_samples_evsel_id on samples(memory_snoop)");
+  q.exec("create index if not exists idx_samples_dtlb_hit_miss on samples(memory_dtlb_hit_miss)");
   q.exec("create index if not exists idx_samples_allocation_id on samples(allocation_id)");
   q.exec("create index if not exists idx_samples_to_ip on samples(to_ip)");
   q.exec("create index if not exists idx_allocations_call_path_id on allocations(call_path_id)");
@@ -324,7 +325,8 @@ unsigned int AutoAnalysis::getSampleCountInMemory(const int symbolId, const int 
   QSqlQuery q("select count(*) from samples inner join allocations on samples.allocation_id = allocations.id\
    where evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") and \
    symbol_id = ?" % allocationLimitString(allocationId) % " and \
-   memory_level = (select id from memory_levels where name = ?)");
+   memory_level = (select id from memory_levels where name = ?) and \
+   memory_dtlb_hit_miss = (select id from memory_dtlb_hit_miss where name = \"Hit\")");
   q.bindValue(0,symbolId);
   q.bindValue(1,memory);
   return executeSingleUnsignedIntQuery(q);
@@ -334,7 +336,9 @@ float AutoAnalysis::getLatencyInMemory(const int symbolId, const int allocationI
 {
   QSqlQuery q("select avg(weight) from samples inner join allocations on samples.allocation_id = allocations.id where symbol_id = ? and \
   evsel_id = (select id from selected_events where name like \"cpu/mem-loads%\") and \
-  memory_level = (select id from memory_levels where name like ?)" + allocationLimitString(allocationId));
+  memory_level = (select id from memory_levels where name like ?) and \
+  memory_dtlb_hit_miss = (select id from memory_dtlb_hit_miss where name = \"Hit\")"
+  + allocationLimitString(allocationId));
   q.bindValue(0,symbolId);
   q.bindValue(1,memory);
   return executeSingleFloatQuery(q);
