@@ -41,7 +41,6 @@ private:
   QStringList allocations;
   QChart *chart;
   QChartView *chartView;
-  QScatterSeries* series;
   QValueAxis* axisY;
   QValueAxis* axisX;
   PointType minPoint;
@@ -53,8 +52,10 @@ private:
   QPair<unsigned long long, QString> decodeTime(const unsigned long long value) const;
   void populateComboBoxWithThreads();
   void draw(const QString& threadId = "");
-  void setPointStyle();
+  void setPointStyle(QScatterSeries* s, const QColor& c);
   virtual void showEvent(QShowEvent *event) override;
+  QVector<QString> getThreadIds() const;
+  QColor getRandomColor(const QList<QColor> &prevCol) const;
 };
 
 #endif // GRAPHWINDOW_H

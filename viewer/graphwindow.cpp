@@ -18,8 +18,6 @@ ui(new Ui::GraphWindow)
   ui->centralLayout->addWidget(chartView);
   axisY = new QValueAxis(chartView);
   axisX = new QValueAxis(chartView);
-  series = new QScatterSeries(chart);
-  series->setUseOpenGL(true);
 }
 
 GraphWindow::~GraphWindow()
@@ -28,6 +26,20 @@ GraphWindow::~GraphWindow()
 }
 
 void GraphWindow::populateComboBoxWithThreads()
+{
+  auto tids = getThreadIds();
+  ui->comboBox->blockSignals(true);
+  ui->comboBox->clear();
+  for(auto tid : tids)
+  {
+    ui->comboBox->addItem(tid);
+  }
+  ui->comboBox->addItem("All Threads");
+  ui->comboBox->setCurrentText("All Threads");
+  ui->comboBox->blockSignals(false);
+}
+
+QVector<QString> GraphWindow::getThreadIds() const
 {
   QSqlQuery getThreadIdsQuery;
   if(!functions.empty() && !allocations.empty())
@@ -55,15 +67,12 @@ void GraphWindow::populateComboBoxWithThreads()
     getThreadIdsQuery.prepare("select (select tid from threads where id = thread_id) as \"tid\" from samples order by tid asc");
   }
   getThreadIdsQuery.exec();
-  ui->comboBox->blockSignals(true);
-  ui->comboBox->clear();
+  QVector<QString> tids;
   while(getThreadIdsQuery.next())
   {
-    ui->comboBox->addItem(getThreadIdsQuery.value(0).toString());
+    tids.append(getThreadIdsQuery.value(0).toString());
   }
-  ui->comboBox->addItem("All Threads");
-  ui->comboBox->setCurrentText("All Threads");
-  ui->comboBox->blockSignals(false);
+  return tids;
 }
 
 QVector<GraphWindow::PointType> GraphWindow::getTimeAddressData(const QString& threadId) const
@@ -80,7 +89,7 @@ QVector<GraphWindow::PointType> GraphWindow::getTimeAddressData(const QString& t
   {
     auto sqlFunctions = SqlUtils::makeSqlStringFunctions(functions);
     auto sqlAllocations = SqlUtils::makeSqlStringObjects(allocations);
-    getTimeAddressQuery.prepare("select time - (select min(time) from samples where id != 0),to_ip from samples where id != 0 and \
+    getTimeAddressQuery.prepare("select time - (select min(time) from samples where id != 0),to_ip,thread_id from samples where id != 0 and \
     memory_opcode in (select id from memory_opcodes where name = \"Load\" or name = \"Store\") and \
     " + tidQueryPart + "\
     symbol_id in (select id from symbols where name = " + sqlFunctions + " ) and \
@@ -89,7 +98,7 @@ QVector<GraphWindow::PointType> GraphWindow::getTimeAddressData(const QString& t
   else if(!functions.empty() && allocations.empty())
   {
     auto sqlFunctions = SqlUtils::makeSqlStringObjects(functions);
-    getTimeAddressQuery.prepare("select time - (select min(time) from samples where id != 0),to_ip from samples where id != 0 and \
+    getTimeAddressQuery.prepare("select time - (select min(time) from samples where id != 0),to_ip,thread_id from samples where id != 0 and \
     memory_opcode in (select id from memory_opcodes where name = \"Load\" or name = \"Store\") and \
     " + tidQueryPart + "\
     symbol_id in (select id from symbols where name = " + sqlFunctions + " ) order by time asc");
@@ -97,14 +106,14 @@ QVector<GraphWindow::PointType> GraphWindow::getTimeAddressData(const QString& t
   else if(functions.empty() && !allocations.empty())
   {
     auto sqlAllocations = SqlUtils::makeSqlStringObjects(allocations);
-    getTimeAddressQuery.prepare("select time - (select min(time) from samples where id != 0),to_ip from samples where id != 0 and \
+    getTimeAddressQuery.prepare("select time - (select min(time) from samples where id != 0),to_ip,thread_id from samples where id != 0 and \
     memory_opcode in (select id from memory_opcodes where name = \"Load\" or name = \"Store\") and \
     " + tidQueryPart + "\
     allocation_id in ( " + sqlAllocations + ") order by time asc");
   }
   else
   {
-    getTimeAddressQuery.prepare("select time - (select min(time) from samples where id != 0),to_ip from samples where id != 0 and \
+    getTimeAddressQuery.prepare("select time - (select min(time) from samples where id != 0),to_ip,thread_id from samples where id != 0 and \
     " + tidQueryPart + "\
     memory_opcode in (select id from memory_opcodes where name = \"Load\" or name = \"Store\") \
     order by time asc limit 1000");
@@ -112,9 +121,9 @@ QVector<GraphWindow::PointType> GraphWindow::getTimeAddressData(const QString& t
   getTimeAddressQuery.setForwardOnly(true);
   getTimeAddressQuery.exec();
   while(getTimeAddressQuery.next())
-    {
-      values.push_back(PointType(getTimeAddressQuery.value(0).toULongLong(),getTimeAddressQuery.value(1).toULongLong()));
-    }
+  {
+    values.push_back(PointType(getTimeAddressQuery.value(0).toULongLong(),getTimeAddressQuery.value(1).toULongLong()));
+  }
   return values;
 }
 
@@ -143,14 +152,14 @@ void GraphWindow::setAxisX(const QVector<PointType>& values, QChartView *chartVi
   maxPoint.first = maxTimePoint->first;
 }
 
-void GraphWindow::setPointStyle()
+void GraphWindow::setPointStyle(QScatterSeries* series, const QColor& c = Qt::black)
 {
   QPen pen;
   pen.setWidth(1);
   series->setPen(pen);
   QBrush brush;
   brush.setStyle(Qt::SolidPattern);
-  brush.setColor(Qt::black);
+  brush.setColor(c);
   series->setBrush(brush);
   series->setMarkerSize(2);
 }
@@ -164,42 +173,91 @@ void GraphWindow::showEvent(QShowEvent *event)
   }
 }
 
+QColor GraphWindow::getRandomColor(const QList<QColor>& prevCol) const
+{
+  QList<QBrush> brushScale;
+  static const int init = 1;
+  constexpr double golden_ratio = 0.618033988749895 * 256;
+  double h = init + golden_ratio * prevCol.count();
+  auto hInt = static_cast<int>(h) % 256;
+  auto c = QColor::fromHsv(hInt, 235, 235, 255);
+  return c;
+}
+
 void GraphWindow::draw(const QString& threadId)
 {
-  chart->removeSeries(series);
-  series->clear();
+  chart->removeAllSeries();
 
   if(threadId == "")
   {
-    series->setName("All Threads");
+    QMap<QString,QColor> tidColorMap;
+    auto tids = getThreadIds();
+    for(auto tid : tids)
+    {
+      auto series = new QScatterSeries(chart);
+      series->setUseOpenGL(true);
+      series->setName(tid);
+      auto values = getTimeAddressData(tid);
+      if(!values.empty())
+      {
+        if(tidColorMap.contains(tid))
+        {
+          setPointStyle(series,tidColorMap.value(tid));
+        }
+        else
+        {
+          auto c = getRandomColor(tidColorMap.values());
+          tidColorMap.insert(tid,c);
+          setPointStyle(series,c);
+        }
+      }
+      for(auto&& item : values)
+      {
+        *series << QPointF(item.first,item.second);
+      }
+      if(!axisSet)
+      {
+        chart->createDefaultAxes();
+        setAxisX(values, chartView);
+        setAxisY(values, chartView);
+        axisSet = true;
+      }
+      chart->addSeries(series);
+    }
   }
   else
   {
+    auto series = new QScatterSeries(chart);
+    series->setUseOpenGL(true);
     series->setName("Thread Id " + threadId);
+    setPointStyle(series);
+    auto values = getTimeAddressData(threadId);
+    for(auto&& item : values)
+    {
+      *series << QPointF(item.first,item.second);
+    }
+    if(!axisSet)
+    {
+      chart->createDefaultAxes();
+      setAxisX(values, chartView);
+      setAxisY(values, chartView);
+      axisSet = true;
+    }
+    chart->addSeries(series);
   }
-
-  setPointStyle();
-  auto values = getTimeAddressData(threadId);
-  for(auto&& item : values)
-  {
-    *series << QPointF(item.first,item.second);
-  }
-
-  if(!axisSet)
-  {
-    chart->createDefaultAxes();
-    setAxisX(values, chartView);
-    setAxisY(values, chartView);
-    axisSet = true;
-  }
-
   QPen invPen;
   invPen.setWidth(0);
-  series->setPen(invPen);
-  *series << QPointF(minPoint.first,minPoint.second);
-  *series << QPointF(maxPoint.first,maxPoint.second);
-
-  chart->addSeries(series);
+  invPen.setColor(Qt::transparent);
+  QBrush invBrush;
+  invBrush.setColor(Qt::transparent);
+  auto invSer = new QScatterSeries(chart);
+  invSer->setUseOpenGL(true);
+  invSer->setPen(invPen);
+  invSer->setBrush(invBrush);
+  *invSer << QPointF(minPoint.first,minPoint.second);
+  *invSer << QPointF(maxPoint.first,maxPoint.second);
+  chart->addSeries(invSer);
+  invSer->setVisible(false);
 }
 
 void GraphWindow::setFunctions(const QStringList &functions)
@@ -224,13 +282,13 @@ QPair<unsigned long long, QString> GraphWindow::decodeTime(const unsigned long l
   unsigned long long outValue = 0;
   if(min != 0)
   {
-   text = "s";
-   outValue = s + s%60;
+    text = "s";
+    outValue = s + s%60;
   }
   else if(s != 0)
   {
-   text = "ms";
-   outValue = ms + ms % 1000;
+    text = "ms";
+    outValue = ms + ms % 1000;
   }
   else if (ms != 0)
   {
