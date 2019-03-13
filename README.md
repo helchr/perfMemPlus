@@ -7,7 +7,7 @@ Installation
 =====
 Run buildAll.sh
 
-This script is designed for Ubuntu 16.04 and may require changes on other systems
+This script is designed for Ubuntu 18.04 and may require changes on other systems
 
 
 Or build components located in the sub directories individually:
