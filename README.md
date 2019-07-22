@@ -1,6 +1,7 @@
 Perf Mem Plus
 ===============
-Tool for memory performance analysis based on Linux perf
+Tool for memory performance analysis based on Linux perf.
+A paper about it was published at ISC 2019: Helm, C and Taura, K "PerfMemPlus: A Tool for Automatic Discovery of Memory Performance Problems."
 
 
 Installation
