@@ -12,7 +12,7 @@ jobs:
     - name: install qt
       run: | 
         sudo apt-get install qt5-default
-        suod apt-get install libqt5charts5 #only required for viwer
+        sudo apt-get install libqt5charts5 #only required for viwer
     - name: make prepareDatabase
       working-directory: ./prepareDatabase
       run: |
