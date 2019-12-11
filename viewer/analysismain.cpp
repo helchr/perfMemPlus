@@ -27,16 +27,29 @@ AnalysisMain::AnalysisMain(QWidget *parent) :
   connect(queryAutoAnalysis,&QFutureWatcher<QList<Result>*>::finished,this,&AnalysisMain::displayAutoAnalysisResult);
 }
 
-void AnalysisMain::loadDatabase(const QString& path)
+
+void AnalysisMain::sqlitePerformanceSettings()
+{
+  QSqlQuery q;
+  q.exec("PRAGMA synchronous = OFF");
+  q.exec("PRAGMA journal_mode = OFF");
+  q.exec("PRAGMA cache_size = 500000"); // page size of 1KB = 500MB cache size
+}
+
+void AnalysisMain::loadDatabase(const QString& path, const bool headless)
 {
   QSqlError err = initDb(path);
   if (err.type() != QSqlError::NoError)
   {
-    showError(err);
+    showError(err,headless);
     return;
   }
-
   createViews();
+  sqlitePerformanceSettings();
+  if(headless)
+  {
+    return;
+  }
 
   modelFunctions = new QSqlRelationalTableModel(ui->functionsTableView);
   modelFunctions->setEditStrategy(QSqlTableModel::OnManualSubmit);
@@ -51,7 +64,7 @@ void AnalysisMain::loadDatabase(const QString& path)
 
   if (!modelFunctions->select())
   {
-    showError(modelFunctions->lastError());
+    showError(modelFunctions->lastError(),headless);
     return;
   }
 
@@ -72,7 +85,7 @@ void AnalysisMain::loadDatabase(const QString& path)
 
   if (!modelObjects->select())
   {
-    showError(modelObjects->lastError());
+    showError(modelObjects->lastError(),headless);
     return;
   }
 
@@ -88,7 +101,7 @@ void AnalysisMain::loadDatabase(const QString& path)
 
   if (!modelObjectsAllocationSites->select())
   {
-    showError(modelObjectsAllocationSites->lastError());
+    showError(modelObjectsAllocationSites->lastError(),headless);
     return;
   }
 
@@ -150,16 +163,23 @@ AnalysisMain::~AnalysisMain()
   delete ui;
 }
 
-void AnalysisMain::setDbPath(const QString &path)
+void AnalysisMain::setDbPath(const QString &path, const bool headless)
 {
   dbPath = path;
-  loadDatabase(path);
+  loadDatabase(path,headless);
 }
 
-void AnalysisMain::showError(const QSqlError &err)
+void AnalysisMain::showError(const QSqlError &err, bool headless)
 {
-  QMessageBox::critical(this, "Unable to initialize Database",
+   if(headless)
+   {
+     qDebug() << "Unable to initialize Database" + err.text();
+   }
+   else
+   {
+    QMessageBox::critical(this, "Unable to initialize Database",
                         "Error initializing database: " + err.text());
+   }
 }
 
 void AnalysisMain::on_actionOpen_Database_triggered()
@@ -452,8 +472,7 @@ void AnalysisMain::on_runPushButton_clicked()
   }
   ui->autoAnalysisResultsTreeWidget->clear();
   AutoAnalysis aa;
-  bool considerObjects = true;
-  queryAutoAnalysis->setFuture(QtConcurrent::run(aa,&AutoAnalysis::run,considerObjects));
+  queryAutoAnalysis->setFuture(QtConcurrent::run(aa,&AutoAnalysis::run));
   ui->runPushButton->setDisabled(true);
   ui->runPushButton->setText("Analysis Running");
 }
@@ -469,9 +488,7 @@ void AnalysisMain::displayAutoAnalysisResult()
     QMap<QString,QTreeWidgetItem*> functionMap;
     for(auto result : results)
     {
-      if(result.accessPattern || result.l1Bandwidth.problem || result.workingSetL1 || result.workingSetL2 || \
-      result.falseSharing || result.l2Bandwidth.problem || result.l3Bandwidth.problem || result.dramBandwidth.problem || \
-      result.remoteDramBandwidth.problem)
+      if(result.falseSharing || result.trueSharing || result.dramBandwidth.problem || result.remoteDramBandwidth.problem)
       {
         QTreeWidgetItem* objectItem;
         if(functionMap.contains(result.function))
@@ -489,7 +506,7 @@ void AnalysisMain::displayAutoAnalysisResult()
         {
           QStringList info;
           info << "Function: " + result.function;
-          info << "Execution time contribution: " + QString::number(result.functionExectimePercent,'f',1) + "% " + "Memory Stall Cycles: " + QString::number(result.memoryStallCycles);
+          info << "Execution time contribution: " + QString::number(result.functionExectimePercent,'f',1) + "% ";
           auto functionItem = new QTreeWidgetItem(ui->autoAnalysisResultsTreeWidget,info);
           ui->autoAnalysisResultsTreeWidget->addTopLevelItem(functionItem);
           QStringList objInfo;
@@ -501,112 +518,37 @@ void AnalysisMain::displayAutoAnalysisResult()
           functionItem->setExpanded(true);
           objectItem->setExpanded(true);
         }
-        if(result.accessPattern)
-        {
-          QStringList info;
-          info << "Array Access Pattern";
-          auto probItem = new QTreeWidgetItem(objectItem,info);
-          objectItem->addChild(probItem);
-        }
         if(result.falseSharing)
         {
           QStringList info;
           //info << "False Sharing" << "HITM Accesses: " + QString::number(result.hitmPercent,'f',1) + "%";
-          info << "False Sharing" << "Latency Savings: " + QString::number(result.falseSharingLatencySavings,'e',1);
+          info << "False Sharing";
           auto probItem = new QTreeWidgetItem(objectItem,info);
+          QStringList addresses;
+          auto addrStr = addresses.join(", ");
+          QStringList addrList(addrStr);
+          auto probDetails = new QTreeWidgetItem(probItem,addrList);
+          probItem->addChild(probDetails);
           objectItem->addChild(probItem);
         }
         if(result.trueSharing)
         {
           QStringList info;
-          info << "True Sharing" << "Latency Savings: " + QString::number(result.falseSharingLatencySavings,'e',1);
+          info << "True Sharing";
           auto probItem = new QTreeWidgetItem(objectItem,info);
           objectItem->addChild(probItem);
-        }
-        if(result.modifiedCachelines)
-        {
-          QStringList info;
-          info << "Modified Cachelines" << "Latency Savings: " + QString::number(result.falseSharingLatencySavings,'e',1);
-          auto probItem = new QTreeWidgetItem(objectItem,info);
+          QStringList addresses;
+          auto addrStr = addresses.join(", ");
+          QStringList addrList(addrStr);
+          auto probDetails = new QTreeWidgetItem(probItem,addrList);
+          probItem->addChild(probDetails);
           objectItem->addChild(probItem);
         }
-       if(result.workingSetL1)
-        {
-          QStringList info;
-          info << "Working set too large for L1 Cache" ;
-          //info << "L1 hit rate: " + QString::number(result.l1HitRate,'f',1) + "%";
-          info << "Latency Savings: " + QString::number(result.l1LatencySavings,'e',1);
-          auto probItem = new QTreeWidgetItem(objectItem,info);
-          objectItem->addChild(probItem);
-        }
-        if(result.workingSetL2)
-        {
-          QStringList info;
-          info << "Working set too large for L2 Cache" ;
-          //info << "L2 hit rate: " + QString::number(result.l2HitRate,'f',1) + "%";
-          info << "Latency Savings: " + QString::number(result.l2LatencySavings,'e',1);
-          auto probItem = new QTreeWidgetItem(objectItem,info);
-          objectItem->addChild(probItem);
-        }
-        //showBandwidthResults(result.l1Bandwidth,objectItem);
-        //showBandwidthResults(result.l2Bandwidth,objectItem);
-        //showBandwidthResults(result.l3Bandwidth,objectItem);
-        //showBandwidthResults(result.remoteCacheBandwidth,objectItem);
         showBandwidthResults(result.dramBandwidth,objectItem);
         showBandwidthResults(result.remoteDramBandwidth,objectItem);
       }
     }
   }
-  /*
-  else
-  {
-    for(auto result : results)
-    {
-      if(result.accessPattern || result.bandwidth || result.workingSetL1 || result.workingSetL2 || result.falseSharing)
-      {
-        QStringList info;
-        info << result.function;
-        auto functionItem = new QTreeWidgetItem(ui->autoAnalysisResultsTreeWidget,info);
-        ui->autoAnalysisResultsTreeWidget->addTopLevelItem(functionItem);
-        if(result.accessPattern)
-        {
-          QStringList info;
-          info << "Array Access Pattern";
-          auto probItem = new QTreeWidgetItem(functionItem,info);
-          functionItem->addChild(probItem);
-        }
-        if(result.falseSharing)
-        {
-          QStringList info;
-          info << "False Sharing" << "Hitm Count: " + result.hitmCount;
-          auto probItem = new QTreeWidgetItem(functionItem,info);
-          functionItem->addChild(probItem);
-        }
-        if(result.bandwidth)
-        {
-          QStringList info;
-          info << "Main memory bandwidth limit" ;
-          auto probItem = new QTreeWidgetItem(functionItem,info);
-          functionItem->addChild(probItem);
-        }
-        if(result.workingSetL1)
-        {
-          QStringList info;
-          info << "Working set too large for L1 Cache" ;
-          auto probItem = new QTreeWidgetItem(functionItem,info);
-          functionItem->addChild(probItem);
-        }
-        if(result.workingSetL2)
-        {
-          QStringList info;
-          info << "Working set too large for L2 Cache" ;
-          auto probItem = new QTreeWidgetItem(functionItem,info);
-          functionItem->addChild(probItem);
-        }
-      }
-    }
-  }
-  */
   QTreeWidgetItemIterator it(ui->autoAnalysisResultsTreeWidget);
   if(*it == nullptr)
   {
@@ -627,13 +569,16 @@ void AnalysisMain::showBandwidthResults(const BandwidthResult &r, const auto& ob
     //info << "Latency limit exceeded by " + QString::number(result.latencyOverLimitPercent,'f',1) + "%";
     if(r.lowSampleCount)
     {
-      info += " Warning: low sample count";
+      info << QString(" Warning: low sample count") + " Parallel readers: " + QString::number(r.parallelReaders) + " Latency: " + QString::number(r.latency);
     }
-    info << "Latency savings:" + QString::number(r.latencySavings,'e',1);
+    else
+    {
+      info << "Parallel readers: " + QString::number(r.parallelReaders) + " Latency: " + QString::number(r.latency);
+    }
+    //info << "Latency savings:" + QString::number(r.latencySavings,'e',1);
     auto probItem = new QTreeWidgetItem(objectItem,info);
     objectItem->addChild(probItem);
   }
-
 }
 
 void AnalysisMain::displayCallstack()

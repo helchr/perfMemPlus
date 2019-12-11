@@ -1,2 +1,8 @@
 viewer.pro.user
+moc_*
+*.o
+ui_*
+Makefile
+viewer
+.qmake.stash
 

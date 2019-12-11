@@ -107,9 +107,22 @@ int _getpid() {
 }
 
 struct log *get_log() {
-	 if(strcmp(program_invocation_short_name,"perf") == 0)
+	 if(strcmp(program_invocation_short_name,"perf") == 0 ||
+	 strcmp(program_invocation_short_name,"basename") == 0 ||
+	 strcmp(program_invocation_short_name,"dirname") == 0 ||
+	 strcmp(program_invocation_short_name,"cat") == 0 ||
+	 strcmp(program_invocation_short_name,"mkdir") == 0 ||
+	 strcmp(program_invocation_short_name,"rm") == 0 ||
+	 strcmp(program_invocation_short_name,"date") == 0 ||
+	 strcmp(program_invocation_short_name,"time") == 0 ||
+	 strcmp(program_invocation_short_name,"tee") == 0 ||
+	 strcmp(program_invocation_short_name,"cp") == 0 ||
+	 strcmp(program_invocation_short_name,"mv") == 0 ||
+	 strcmp(program_invocation_short_name,"bash") == 0)
 	 {
-		 // Exclude tracking of perf itself
+		 // Exclude tracking of some system tools that often run with apps
+		 // Most likely there is no interest in profiling
+		 // Reduces overhead because allocations of these apps are not logged
 		 return NULL;
 	 }
 
@@ -180,44 +193,6 @@ int get_trace(size_t* size, void** strings) {
    return 0;
 }
 
-
-extern "C" void *numa_alloc_onnode(size_t sz, size_t node) {
-   void *addr = libc_numa_alloc_onnode(sz, node);
-	 if(sz < AllocationMinSize)
-		 return addr;
-   if(!_in_trace) {
-      struct log *log_arr = get_log();
-      if(log_arr) {
-	 log_arr->rdt = get_nsecs();
-         log_arr->addr = addr;
-         log_arr->size = sz;
-         log_arr->entry_type = 1;
-         log_arr->cpu = sched_getcpu();
-         log_arr->pid = _getpid();
-         get_trace(&log_arr->callchain_size, log_arr->callchain_strings);
-      }
-   }
-   return addr;
-}
-
-extern "C" void *numa_alloc_interleaved(size_t sz) {
-   void *addr = libc_numa_alloc_interleaved(sz);
-   if(sz < AllocationMinSize)
-     return addr;
-   if(!_in_trace) {
-      struct log *log_arr = get_log();
-      if(log_arr) {
-   log_arr->rdt = get_nsecs();
-         log_arr->addr = addr;
-         log_arr->size = sz;
-         log_arr->entry_type = 1;
-         log_arr->cpu = sched_getcpu();
-         log_arr->pid = _getpid();
-         get_trace(&log_arr->callchain_size, log_arr->callchain_strings);
-      }
-   }
-   return addr;
-}
 
 extern "C" void *malloc(size_t sz) {
    if(!libc_malloc)
@@ -474,8 +449,6 @@ m_init(void) {
    libc_mmap64 = (void * ( *)(void *, size_t, int, int, int, off_t)) dlsym(RTLD_NEXT, "mmap64");
    libc_memalign = (void * ( *)(size_t, size_t)) dlsym(RTLD_NEXT, "memalign");
    libc_posix_memalign = (int ( *)(void **, size_t, size_t)) dlsym(RTLD_NEXT, "posix_memalign");
-	 libc_numa_alloc_onnode = (void * ( *)(size_t,size_t)) dlsym(RTLD_NEXT, "numa_alloc_onnode");
-   libc_numa_alloc_interleaved = (void * ( *)(size_t)) dlsym(RTLD_NEXT, "numa_alloc_interleaved");
    const char* s = getenv("ALLOCATION_MIN_SIZE");
 	 AllocationMinSize = atol(s);
 }

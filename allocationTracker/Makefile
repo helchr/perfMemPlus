@@ -1,4 +1,4 @@
-CFLAGS=-Wall -g -ggdb3 -O2
+CFLAGS=-Wall -g -O3
 LDFLAGS=-lnuma
 
 .PHONY: all clean

@@ -7,6 +7,7 @@
 #include <limits>
 #include "address2Line.h"
 #include <QStringBuilder>
+#include "counterattributes.h"
 
 struct AllocationInfoRaw
 {
@@ -32,7 +33,7 @@ void sqlitePerformanceSettings(QSqlDatabase& db)
 {
   db.exec("PRAGMA synchronous = OFF");
   db.exec("PRAGMA journal_mode = OFF");
-  db.exec("PRAGMA cache_size = 10000");
+  db.exec("PRAGMA cache_size = 500000"); // page size of 1KB = 500MB cache size
 }
 
 void createAllocationsTable(QSqlDatabase& db)
@@ -111,15 +112,15 @@ bool isInCallchain(const QString& line)
 
 bool isCallchainStart(const QString& line)
 {
-	if (line == QLatin1String("callchain"))
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-	/*
+    if (line == QLatin1String("callchain"))
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+    /*
   auto idx = line.indexOf(' ',0);
   if(idx != -1)
   {
@@ -129,7 +130,7 @@ bool isCallchainStart(const QString& line)
     }
   }
   return false;
-	*/
+    */
 }
 
 bool isAllocationInfo(const QString& line)
@@ -181,6 +182,23 @@ void printWarningIncompleteEntry()
 
 
 
+void insertAllocation(const AllocationInfoRaw& ao, const long long threadId, const QSqlDatabase& db)
+{
+    QSqlQuery insertAllocation(db);
+    prepare(insertAllocation,"INSERT INTO allocations \
+    ( thread_id, cpu, address_start, address_end, \
+    time_start, time_end, call_path_id) \
+    VALUES (?, ?, ?, ?, ?, ?, ?)");
+    insertAllocation.bindValue(0,threadId);
+    insertAllocation.bindValue(1,ao.cpu);
+    insertAllocation.bindValue(2,(long long) ao.address);
+    insertAllocation.bindValue(3,(long long) (ao.address+ao.size));
+    insertAllocation.bindValue(4,(long long) ao.timestamp);
+    insertAllocation.bindValue(5,std::numeric_limits<long long>::max());
+    insertAllocation.bindValue(6,ao.callpathId);
+    insertAllocation.exec();
+}
+
 void processAllocationInfo(const AllocationInfoRaw& ao, const QSqlDatabase& db)
 {
   if(isAllocation(ao))
@@ -211,26 +229,14 @@ void processAllocationInfo(const AllocationInfoRaw& ao, const QSqlDatabase& db)
       insertNewThread.exec();
       threadId = getLastInsertedId(db);
     }
-    QSqlQuery insertAllocation(db);
-    prepare(insertAllocation,"INSERT INTO allocations \
-    ( thread_id, cpu, address_start, address_end, \
-    time_start, time_end, call_path_id) \
-    VALUES (?, ?, ?, ?, ?, ?, ?)");
-    insertAllocation.bindValue(0,threadId);
-    insertAllocation.bindValue(1,ao.cpu);
-    insertAllocation.bindValue(2,(long long) ao.address);
-    insertAllocation.bindValue(3,(long long) (ao.address+ao.size));
-    insertAllocation.bindValue(4,(long long) ao.timestamp);
-    insertAllocation.bindValue(5,std::numeric_limits<long long>::max());
-    insertAllocation.bindValue(6,ao.callpathId);
-    insertAllocation.exec();
+    insertAllocation(ao,threadId,db);
   }
   else if(isDeallocation(ao)) // must be deallocation
   {
     // update end time of entry
     QSqlQuery getAllocation(db);
     prepare(getAllocation,"select id from allocations where \
-    address_start = ? order by time_start desc");
+    address_start = ? order by time_start desc limit 1");
     getAllocation.bindValue(0,ao.address);
     getAllocation.exec();
     long long id;
@@ -238,7 +244,7 @@ void processAllocationInfo(const AllocationInfoRaw& ao, const QSqlDatabase& db)
     {
       id = getAllocation.value(0).toLongLong();
       QSqlQuery updateAllocation(db);
-      prepare(updateAllocation,"upate allocations set time_end = ? where id = ?");
+      prepare(updateAllocation,"update allocations set time_end = ? where id = ?");
       updateAllocation.bindValue(0,ao.timestamp);
       updateAllocation.bindValue(1,id);
       updateAllocation.exec();
@@ -564,6 +570,19 @@ void readAllocationFile(const std::string& file, QSqlDatabase& db)
   std::string line;
   int tid = getTid(QString::fromStdString(file));
   std::vector<long long> callpathSymbolIds;
+
+  // insert of anon object
+  AllocationInfoRaw a0;
+  a0.cpu = 0;
+  a0.pid = 0;
+  a0.tid = 0;
+  a0.size = 0;
+  a0.type = 0;
+  a0.address = 0;
+  a0.timestamp = 0;
+  a0.callpathId = 0;
+  insertAllocation(a0,0,db);
+
   while (std::getline(infile,line))
   {
     if(isCallchainStart(QString::fromStdString(line)))
@@ -661,31 +680,32 @@ void updateRelationshipKeys(QSqlDatabase& db)
   QSqlQuery getIds;
   prepare(getIds,"select id from allocations");
   QSqlQuery updateSample;
-  QSqlQuery selectLoadStore;
-  selectLoadStore.exec("select id from selected_events where name like 'cpu/mem-loads%' or name like 'cpu/mem-stores%'");
-  long long id1 = -1;
-  long long id2 = -1;
-  if(selectLoadStore.next())
+  QSqlQuery selectLoad;
+  prepare(selectLoad,"select id from selected_events where name like 'cpu/mem-loads%'");
+  selectLoad.exec();
+  QSqlQuery selectStore;
+  prepare(selectStore,"select id from selected_events where name like 'cpu/mem-stores%'");
+  selectStore.exec();
+  long long loadId = -1;
+  long long storeId = -1;
+  if(selectLoad.next())
   {
-    id1 = selectLoadStore.value(0).toLongLong();
-    if(selectLoadStore.next())
-    {
-      id2 = selectLoadStore.value(0).toLongLong();
-    }
-    else
-    {
-      throw std::runtime_error("Event id not found");
-    }
+    loadId = selectLoad.value(0).toLongLong();
   }
   else
   {
-    throw std::runtime_error("Event id not found");
+      //Loads must always be in db
+      throw std::runtime_error("Event id not found");
+  }
+  if(selectStore.next())
+  {
+      storeId = selectStore.value(0).toLongLong();
   }
   prepare(updateSample,"update samples set allocation_id = ? where id = ?");
   QSqlQuery createTmpTable;
   prepare(createTmpTable,"create table samplesMem as select id, time, to_ip from samples where evsel_id in (?,?)");
-  createTmpTable.bindValue(0,id1);
-  createTmpTable.bindValue(1,id2);
+  createTmpTable.bindValue(0,loadId);
+  createTmpTable.bindValue(1,storeId);
   createTmpTable.exec();
   db.exec("create index idx_samplesMem_toIp on samplesMem(to_ip,time,id)"); // covering index, id must be last parameter
   QSqlQuery findUpdates;
@@ -693,7 +713,6 @@ void updateRelationshipKeys(QSqlDatabase& db)
   getIds.exec();
   QVariantList allocIds;
   QVariantList sampleIds;
-  //std::cout << getTime() << " Start query part" << std::endl;
   while(getIds.next())
   {
     auto id = getIds.value(0).toLongLong();
@@ -723,12 +742,14 @@ void updateRelationshipKeys(QSqlDatabase& db)
     }
     getAllocationData.finish();
   }
-
-  //std::cout << getTime() << " Start update part" << std::endl;
   db.exec("BEGIN TRANSACTION");
   updateSample.addBindValue(allocIds);
   updateSample.addBindValue(sampleIds);
   updateSample.execBatch();
+
+  prepare(updateSample,"update samples set allocation_id = 1 where allocation_id is NULL and evsel_id = (select id from selected_events where name like 'cpu/mem-loads%')");
+  updateSample.exec();
+
   db.exec("END TRANSACTION");
   db.exec("drop table samplesMem");
   getIds.finish();
@@ -845,6 +866,63 @@ void fillMetadataTable(QSqlDatabase& db, const QString& cmdline, const int sampl
   q.exec();
 }
 
+QHash<unsigned int, QList<unsigned int>> readCpuNodeMapping()
+{
+
+    QHash<unsigned int, QList<unsigned int>> mapping;
+    QProcess* process = new QProcess;
+    QString file = QString("sh -c \"numactl --hardware  ");
+    process->start(file);
+    process->waitForFinished(100);
+    auto output = process->readAllStandardOutput();
+    auto text = QString(output);
+    QRegularExpression regexp("node (?<node>\\d) cpus:(?<cpus>( \\d+)+)");
+    auto matchIterator = regexp.globalMatch(text);
+    while(matchIterator.hasNext())
+    {
+        auto match = matchIterator.next();
+        auto node = static_cast<unsigned int>(match.captured("node").toULong());
+        auto cpuStr = match.captured("cpus");
+        cpuStr.remove(0,1); // remove first leading space
+        auto cpuStrList = cpuStr.split(" ");
+        QList<unsigned int> cpuList;
+        std::transform(cpuStrList.begin(),cpuStrList.end(),std::back_inserter(cpuList),[](QString cpuAsStr){return cpuAsStr.toULong();});
+        mapping.insert(node,cpuList);
+    }
+    return mapping;
+}
+
+
+QHash<unsigned int, QList<unsigned int>> arcturusCpuNodeMapping()
+{
+    //Fixed mapping for testing purporse
+    QList<unsigned int> node0 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21};//, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65};
+    QList<unsigned int> node1 = {22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43};//, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87};
+    QHash<unsigned int, QList<unsigned int>> mapping;
+    mapping.insert(0,node0);
+    mapping.insert(1,node1);
+    return mapping;
+}
+
+void writeCpuNodeMapping(const QHash<unsigned int, QList<unsigned int>>& mapping, QSqlDatabase& db)
+{
+    db.exec("DROP TABLE IF EXISTS cpuNodeMapping");
+    db.exec("CREATE TABLE cpuNodeMapping ( \
+    cpu INTEGER PRIMARY KEY UNIQUE, \
+    node INTEGER)");
+
+    QSqlQuery q("insert into cpuNodeMapping (cpu,node) values (?,?)");
+    for(auto node : mapping.keys())
+    {
+        for(auto cpu : mapping[node])
+        {
+            q.bindValue(0,cpu);
+            q.bindValue(1,node);
+            q.exec();
+        }
+    }
+}
+
 int main(int argc, char *argv[])
 {
   QString dbname;
@@ -863,6 +941,10 @@ int main(int argc, char *argv[])
   parser.addOption(cmdlineOpt);
   QCommandLineOption allocationDataOpt("allocData","Directory where allocation data is stored","allocData","/tmp");
   parser.addOption(allocationDataOpt);
+  QCommandLineOption dramBandwidthOpt("dramBandwidth","Process data for dram bandwidth");
+  parser.addOption(dramBandwidthOpt);
+  QCommandLineOption l1MissLatencyOpt("l1MissLatency","Process data for l1Miss latency");
+  parser.addOption(l1MissLatencyOpt);
 
   parser.process(a);
   auto arguments = parser.positionalArguments();
@@ -879,6 +961,8 @@ int main(int argc, char *argv[])
   auto cmdline = parser.value(cmdlineOpt);
   auto samplerate = parser.value(samplerateOpt).toInt();
   auto minAllocationSize = parser.value(minAllocationSizeOpt).toInt();
+  auto dramBandwidth = parser.isSet(dramBandwidthOpt);
+  auto l1MissLatency = parser.isSet(l1MissLatencyOpt);
 
   std::cout << getTime() << " Reading allocation data..." << std::endl;
   auto db = QSqlDatabase::addDatabase("QSQLITE");
@@ -894,8 +978,29 @@ int main(int argc, char *argv[])
   std::cout << getTime() << " Reading files complete. Updating samples table..." << std::endl;
   modifySamplesTable();
   updateRelationshipKeys(db);
-  std::cout << getTime() << " Insert complete" << std::endl;
   createViews(db);
+
+  std::cout << getTime() << " Update of samples table complete. Calculating counter metrics..." << std::endl;
+  auto mapping = readCpuNodeMapping();
+  //auto mapping = arcturusCpuNodeMapping(); // for test
+  writeCpuNodeMapping(mapping,db);
+
+  QList<QString> events;
+  if(dramBandwidth == true)
+  {
+    events = {"offcore_response.all_reads.llc_miss.local_dram","offcore_response.all_reads.llc_miss.remote_dram"};
+  }
+  if(l1MissLatency == true)
+  {
+    events = {"l1d_pend_miss.pending","mem_load_uops_retired.l1_miss","mem_load_uops_retired.hit_lfb"};
+  }
+  if(l1MissLatency == true || dramBandwidth == true)
+  {
+    CounterAttributes ca(db);
+    ca.setNodeMapping(mapping);
+    ca.updateIntervals(events);
+  }
   db.close();
+  std::cout << getTime() << " Insert complete" << std::endl;
   return 0;
 }

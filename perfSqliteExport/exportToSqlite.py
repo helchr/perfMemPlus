@@ -364,6 +364,8 @@ class mem_data_src:
 	mem_lock = 0
 	mem_dtlb_hit_miss = 0
 	mem_dtlb = 0
+        mem_lvlnum = 0
+        mem_remote = 0
 
 class Data_src_bits( ctypes.LittleEndianStructure ):
     _fields_ = [
@@ -374,6 +376,8 @@ class Data_src_bits( ctypes.LittleEndianStructure ):
             ("mem_lock", ctypes.c_uint64, 2),
             ("mem_dtlb_hit_miss", ctypes.c_uint64, 3),
             ("mem_dtlb", ctypes.c_uint64, 4),
+            ("mem_lvlnum",ctypes.c_uint64,4),
+            ("mem_remote",ctypes.c_uint64,1)
             ]
 
 class Data_src_t( ctypes.Union):
@@ -394,6 +398,38 @@ def decode_data_src(data_src_bit):
     mds.mem_lock = data_src.mem_lock
     mds.mem_dtlb_hit_miss = data_src.mem_dtlb_hit_miss
     mds.mem_dtlb = data_src.mem_dtlb
+    mds.mem_lvlnum = data_src.mem_lvlnum
+    mds.mem_remote = data_src.mem_remote
+
+    #convert new (skylake) format to old one
+    if(mds.mem_lvl == 0):
+        if(mds.mem_lvlnum == 0x01):
+            mds.mem_level = 1
+        if(mds.mem_lvlnum == 0x02):
+            mds.mem_level = 4
+        if(mds.mem_lvlnum == 0x03):
+            if(mds.mem_remote == 0x01):
+                mds.mem_level = 128
+            else:
+                mds.mem_lvel = 8
+        #if(mds.mem_lvlnum == 0x04):
+            #unsupported by old format
+        if(mds.mem_lvlnum == 0x0b):
+            if(mds.mem_remote == 0x01):
+                mds.mem_level = 128
+            #else:
+                #unsupported by old format
+        if(mds.mem_lvlnum == 0x0c):
+            mds.mem_level = 2
+        if(mds.mem_lvlnum == 0x0d):
+            if(mds.mem_remote == 0x01):
+                mds.mem_lvl = 32
+            else:
+                mds.mem_lvel = 16
+        #if(mds.mem_lvlnum == 0x0e):
+            #unsupported by old format
+        #if(mds.mem_lvlnum == 0x0f):
+            #unsupported by old format
     return mds
 
 def trace_begin():

@@ -11,7 +11,6 @@ greaterThan(QT_MAJOR_VERSION, 5): QT += widgets
 
 TARGET = viewer
 TEMPLATE = app
-
 CONFIG += c++14
 
 # The following define makes your compiler emit warnings if you use

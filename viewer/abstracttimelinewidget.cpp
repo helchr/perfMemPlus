@@ -59,7 +59,7 @@ QString AbstractTimelineWidget::decodeTime(const unsigned long long value)
   }
   else
   {
-    text = value + "ns";
+    text = QString::number(value) + "ns";
   }
   return text;
 }

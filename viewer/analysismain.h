@@ -21,7 +21,7 @@ class AnalysisMain : public QMainWindow
 public:
   explicit AnalysisMain(QWidget *parent = nullptr);
   ~AnalysisMain();
-  void setDbPath(const QString& path);
+  void setDbPath(const QString& path, const bool headless = false);
 
   void dragEnterEvent(QDragEnterEvent *event);
   void dropEvent(QDropEvent *event);
@@ -60,8 +60,8 @@ private:
   QFutureWatcher<TreeItem*>* queryCallstack;
   QFutureWatcher<QList<Result>>* queryAutoAnalysis;
 
-  void showError(const QSqlError &err);
-  void loadDatabase(const QString& path);
+  void showError(const QSqlError &err, const bool headless);
+  void loadDatabase(const QString& path, const bool headless = false);
   void showAllocationCallpath(const int allocationId);
   int getColumnCount(QTableView *tv) const;
   int getColumnCount(QTreeWidget *tv) const;
@@ -79,6 +79,7 @@ private:
   void printCallstackEntry(long long id, long long level, QVector<QString> &callStack);
   QString space(long long level) const;
   void displayAutoAnalysisResult();
+  void sqlitePerformanceSettings();
 };
 
 #endif // ANALYSISMAIN_H
