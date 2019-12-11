@@ -9,9 +9,10 @@ jobs:
     
     steps:
     - uses: actions/checkout@v1
-    - name: make
-      run: make
-    - name: make check
-      run: make check
-    - name: make distcheck
-      run: make distcheck
+    - name: install qt
+      run: sudo apt-get install qt5-default
+    - name: make prepareDatabase
+      run: cd prepareDatabase
+        qmake prepareDatabase.pro
+        make
+
