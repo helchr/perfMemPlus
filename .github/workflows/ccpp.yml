@@ -21,7 +21,7 @@ jobs:
     - name: make allocationTracker
       working-directory: ./allocationTracker
       run: make
-    - name: make viwer
+    - name: make viewer
       working-directory: ./viewer
       run: |
         qmake viewer.pro
