@@ -12,8 +12,18 @@ jobs:
     - name: install qt
       run: sudo apt-get install qt5-default
     - name: make prepareDatabase
+      working-directory: ./prepareDatabase
       run: |
         cd prepareDatabase
         qmake prepareDatabase.pro
         make
+    - name: make allocationTracker
+      working-directory: ./allocationTracker
+      run: make
+    - name: make viwer
+      working-directory: ./viewer
+      run: |
+        qmake viewer.pro
+        make
+        
 
