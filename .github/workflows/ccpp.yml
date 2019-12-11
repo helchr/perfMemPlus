@@ -14,7 +14,6 @@ jobs:
     - name: make prepareDatabase
       working-directory: ./prepareDatabase
       run: |
-        cd prepareDatabase
         qmake prepareDatabase.pro
         make
     - name: make allocationTracker
