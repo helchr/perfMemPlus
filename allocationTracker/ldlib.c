@@ -450,7 +450,6 @@ m_init(void) {
    libc_memalign = (void * ( *)(size_t, size_t)) dlsym(RTLD_NEXT, "memalign");
    libc_posix_memalign = (int ( *)(void **, size_t, size_t)) dlsym(RTLD_NEXT, "posix_memalign");
    const char* s = getenv("ALLOCATION_MIN_SIZE");
-	 AllocationMinSize = atol(s);
    if (s != nullptr)
    {
 	   AllocationMinSize = atol(s);
