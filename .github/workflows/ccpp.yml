@@ -22,7 +22,9 @@ jobs:
         path: |
           viewer/viewer
           allocationTracker/ldlib.so
-          prepareDatabese/prepareDatabase
-          ~/bin/perf
+          prepareDatabase/prepareDatabase
+          perfSqliteExport/exportToSqlite.py
+          perfMemPlus
+          perf
           
           
