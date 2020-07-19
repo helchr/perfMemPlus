@@ -18,8 +18,7 @@ tar jxf /usr/src/linux-source*.tar.bz2
 cd linux-source-*/tools/perf
 make
 make install
-cd ..
-cp ~/bin/perf perf
+cp ~/bin/perf `dirname $0`/perf
 rm -r -f linux-source-*/
 
 
