@@ -14,11 +14,12 @@ make
 cd ..
 
 #build perf
+scriptPath="`dirname \"$0\"`"
+scriptPath="`( cd \"$MY_PATH\" && pwd )`"
 tar jxf /usr/src/linux-source*.tar.bz2
 cd linux-source-*/tools/perf
 make
-make install
-cp ~/bin/perf `dirname $0`/perf
+cp perf "$scriptPath/perf"
 rm -r -f linux-source-*/
 
 
