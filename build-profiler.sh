@@ -19,6 +19,7 @@ cd linux-source-*/tools/perf
 make
 make install
 cd ..
+cp ~/bin/perf perf
 rm -r -f linux-source-*/
 
 
