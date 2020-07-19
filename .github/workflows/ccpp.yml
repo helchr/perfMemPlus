@@ -10,6 +10,7 @@ jobs:
     - uses: actions/checkout@v1
     - name: run build scripts
       run: | 
+        sudo apt update
         #sudo ./build-profiler.sh
         sudo ./build-viewer.sh
     - name: Upload a Build Artifact
