@@ -9,22 +9,7 @@ jobs:
     
     steps:
     - uses: actions/checkout@v1
-    - name: install qt
+    - name: run build scripts
       run: | 
-        sudo apt-get install qt5-default
-        sudo apt-get install libqt5charts5-dev #only required for viewer
-    - name: make prepareDatabase
-      working-directory: ./prepareDatabase
-      run: |
-        qmake prepareDatabase.pro
-        make
-    - name: make allocationTracker
-      working-directory: ./allocationTracker
-      run: make
-    - name: make viewer
-      working-directory: ./viewer
-      run: |
-        qmake viewer.pro
-        make
-        
-
+        sudo ./build-profiler.sh
+        sudo ./build-viewer.sh
