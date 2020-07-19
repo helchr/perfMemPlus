@@ -4,7 +4,6 @@ on: [push]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     
     steps:
@@ -13,3 +12,10 @@ jobs:
       run: | 
         sudo ./build-profiler.sh
         sudo ./build-viewer.sh
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        # Artifact name
+        name: viewer
+        # A file, directory or wildcard pattern that describes what to upload
+        path: viewer/viewer  
