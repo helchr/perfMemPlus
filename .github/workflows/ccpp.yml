@@ -26,5 +26,6 @@ jobs:
           perfSqliteExport/exportToSqlite.py
           perfMemPlus
           perf
+          setPerfEventPermissions.sh
           
           
