@@ -13,6 +13,13 @@ jobs:
         sudo apt update
         sudo ./build-profiler.sh
         sudo ./build-viewer.sh
+        chmod 755 viewer/viewer
+        chmod 755 allocationTracker/ldlib.so
+        chmod 755 prepareDatabase/prepareDatabase
+        chmod 755 perfSqliteExport/exportToSqlite.py
+        chmod 755 perfMemPlus
+        chmod 755 perf
+        chmod 755 setPerfEventPermissions.sh
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2
       with:
