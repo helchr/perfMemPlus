@@ -20,19 +20,13 @@ jobs:
         sudo chmod 755 perfMemPlus
         sudo chmod 755 perf
         sudo chmod 755 setPerfEventPermissions.sh
+        tar -cvf perfMemPlus.tar viewer/viewer allocationTracker/ldlib.so prepareDatabase/prepareDatabase perfSqliteExport/exportToSqlite.py perfMemPlus perf setPerfEventPermissions.sh
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2
       with:
         # Artifact name
         name: perfMemPlus
         # A file, directory or wildcard pattern that describes what to upload
-        path: |
-          viewer/viewer
-          allocationTracker/ldlib.so
-          prepareDatabase/prepareDatabase
-          perfSqliteExport/exportToSqlite.py
-          perfMemPlus
-          perf
-          setPerfEventPermissions.sh
+        path: perfMemPlus.tar
           
           
