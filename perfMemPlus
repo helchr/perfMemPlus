@@ -9,7 +9,7 @@ usage()
 #default argument values
 sampleRate=2000
 filename=./perf.db
-perf=./perf
+perf=`dirname $0`/perf
 allocationMinSize=0
 l1MissLatency=0
 dramBandwidth=0
