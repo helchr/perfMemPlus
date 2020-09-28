@@ -6,24 +6,12 @@ A paper about it was published at ISC 2019: Helm, C and Taura, K "PerfMemPlus: A
 
 Installation
 =====
-Run buildAll.sh
+Required dependencies on Ubuntu can be installed with install-dependencies-viewer.sh and install-dependencies-profiler.sh.
+Those script are designed for Ubuntu 18.04 and may require changes on other systems.
 
-This script is designed for Ubuntu 18.04 and may require changes on other systems
+To build the tool run make in the root directory of this project. By default both the profier and viewer are built.
+Use "make profiler" to build only the profiler. Use "make viewer" to build only the viewer.
 
-
-Or build components located in the sub directories individually:
-
-* allocationTracker
-
-* prepareDatabase
-
-* Perf with python scripting support
-
-* viewer
-
-Check the subdirectories for detailed instructions.
-
-The profiling part and the viewer can run on different systems so build the components for the appropriate environment.
 
 
 Usage
