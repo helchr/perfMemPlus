@@ -10,7 +10,9 @@ jobs:
     - uses: actions/checkout@v1
     - name: run build scripts
       run: | 
-        sudo apt update
+        sudo cp /etc/apt/sources.list /etc/apt/sources.list~
+        sudo sed -Ei 's/^# deb-src /deb-src /' /etc/apt/sources.list
+        sudo apt-get update
         sudo ./install-dependencies-viewer.sh
         sudo ./install-dependencies-profiler.sh
         make
