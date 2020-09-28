@@ -11,15 +11,9 @@ jobs:
     - name: run build scripts
       run: | 
         sudo apt update
-        sudo ./build-profiler.sh
-        sudo ./build-viewer.sh
-        sudo chmod 755 viewer/viewer
-        sudo chmod 755 allocationTracker/ldlib.so
-        sudo chmod 755 prepareDatabase/prepareDatabase
-        sudo chmod 755 perfSqliteExport/exportToSqlite.py
-        sudo chmod 755 perfMemPlus
-        sudo chmod 755 perf
-        sudo chmod 755 setPerfEventPermissions.sh
+        sudo ./install-dependencies-viewer.sh
+        sudo ./install-dependencies-profiler.sh
+        make
         tar -cvf perfMemPlus.tar viewer/viewer allocationTracker/ldlib.so prepareDatabase/prepareDatabase perfSqliteExport/exportToSqlite.py perfMemPlus perf setPerfEventPermissions.sh
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2
