@@ -1,7 +1,7 @@
 .PHONY: all viewer profiler allocationTracker prepareDatabase clean
 
-profiler : allocationTracker prepareDatabase perf
-all: viewer profiler
+all: profiler viewer
+profiler : allocationTracker prepareDatabase 
 
 viewer:
 	cd viewer && qmake viewer.pro
